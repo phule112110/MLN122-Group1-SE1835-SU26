@@ -1,8 +1,19 @@
 // ==================== KHỞI TẠO HỆ THỐNG & ĐỒNG BỘ DỮ LIỆU ====================
 
-// Lấy chế độ chơi từ URL (?role=spectator hoặc mặc định là player)
+// Lấy chế độ chơi và mã phòng từ URL
 const urlParams = new URLSearchParams(window.location.search);
 const isSpectator = urlParams.get('role') === 'spectator';
+let currentRoomId = urlParams.get('room');
+
+// Tự sinh mã phòng ngẫu nhiên cho Spectator để tránh trùng lặp khi thuyết trình
+if (!currentRoomId && isSpectator) {
+  currentRoomId = 'room_' + Math.floor(1000 + Math.random() * 9000);
+  const currentUrl = new URL(window.location.href);
+  currentUrl.searchParams.set('room', currentRoomId);
+  window.location.href = currentUrl.toString();
+} else if (!currentRoomId) {
+  currentRoomId = 'room_default';
+}
 
 // Bộ điều phối cơ sở dữ liệu (Firebase vs LocalStorage)
 class GameDatabase {
@@ -10,11 +21,11 @@ class GameDatabase {
     this.isFirebase = false;
     this.playersCallbacks = [];
     this.techCallbacks = [];
+    this.statusCallbacks = [];
     this.fbDb = null;
   }
 
   init(onReady) {
-    // Kiểm tra xem config.js có cấu hình thực tế chưa
     const hasConfig = typeof firebaseConfig !== 'undefined' && 
                       firebaseConfig.apiKey && 
                       firebaseConfig.apiKey !== "YOUR_API_KEY";
@@ -24,37 +35,48 @@ class GameDatabase {
         firebase.initializeApp(firebaseConfig);
         this.fbDb = firebase.database();
         this.isFirebase = true;
-        console.log("🎮 Đang chạy ở chế độ ONLINE với Firebase Realtime Database.");
+        console.log(`🎮 Đang chạy ONLINE (Firebase) - Phòng: ${currentRoomId}`);
       } catch (e) {
-        console.error("Firebase lỗi, tự động chuyển về chế độ OFFLINE (LocalStorage):", e);
+        console.error("Firebase lỗi, tự động chuyển về LocalStorage:", e);
       }
     } else {
-      console.log("🔌 Đang chạy ở chế độ OFFLINE (Đồng bộ qua LocalStorage giữa các tab).");
-      // Hiển thị cảnh báo chưa cấu hình lên console/UI
+      console.log(`🔌 Đang chạy OFFLINE (LocalStorage) - Phòng: ${currentRoomId}`);
       const toggleBtn = document.getElementById('btnToggleRole');
       if (toggleBtn) {
-        toggleBtn.innerHTML += " (Offline Simulation)";
+        toggleBtn.innerHTML += " (Offline)";
       }
     }
 
     if (!this.isFirebase) {
-      // Khởi tạo LocalStorage nếu chưa có
-      if (!localStorage.getItem('calon_players')) {
-        localStorage.setItem('calon_players', JSON.stringify({}));
+      // Khởi tạo LocalStorage cho phòng hiện tại
+      if (!localStorage.getItem(`calon_players_${currentRoomId}`)) {
+        localStorage.setItem(`calon_players_${currentRoomId}`, JSON.stringify({}));
       }
-      if (!localStorage.getItem('calon_market_tech')) {
-        localStorage.setItem('calon_market_tech', JSON.stringify({}));
+      if (!localStorage.getItem(`calon_market_tech_${currentRoomId}`)) {
+        localStorage.setItem(`calon_market_tech_${currentRoomId}`, JSON.stringify({}));
+      }
+      if (!localStorage.getItem(`calon_status_${currentRoomId}`)) {
+        localStorage.setItem(`calon_status_${currentRoomId}`, JSON.stringify({
+          started: false,
+          gameOver: false,
+          timeLeft: 300,
+          duration: 300
+        }));
       }
 
-      // Lắng nghe sự thay đổi từ các tab khác cùng nguồn (origin)
+      // Lắng nghe sự thay đổi từ các tab khác
       window.addEventListener('storage', (e) => {
-        if (e.key === 'calon_players') {
+        if (e.key === `calon_players_${currentRoomId}`) {
           const data = JSON.parse(e.newValue || '{}');
           this.playersCallbacks.forEach(cb => cb(data));
         }
-        if (e.key === 'calon_market_tech') {
+        if (e.key === `calon_market_tech_${currentRoomId}`) {
           const data = JSON.parse(e.newValue || '{}');
           this.techCallbacks.forEach(cb => cb(data));
+        }
+        if (e.key === `calon_status_${currentRoomId}`) {
+          const data = JSON.parse(e.newValue || '{}');
+          this.statusCallbacks.forEach(cb => cb(data));
         }
       });
     }
@@ -65,13 +87,12 @@ class GameDatabase {
   // Đăng ký sự kiện thay đổi danh sách người chơi
   onPlayersChange(callback) {
     if (this.isFirebase) {
-      this.fbDb.ref('players').on('value', (snapshot) => {
+      this.fbDb.ref(`rooms/${currentRoomId}/players`).on('value', (snapshot) => {
         callback(snapshot.val() || {});
       });
     } else {
       this.playersCallbacks.push(callback);
-      // Kích hoạt ngay lập tức lần đầu
-      const data = JSON.parse(localStorage.getItem('calon_players') || '{}');
+      const data = JSON.parse(localStorage.getItem(`calon_players_${currentRoomId}`) || '{}');
       callback(data);
     }
   }
@@ -79,12 +100,25 @@ class GameDatabase {
   // Đăng ký sự kiện thay đổi dữ liệu công nghệ thị trường
   onMarketTechChange(callback) {
     if (this.isFirebase) {
-      this.fbDb.ref('market_tech').on('value', (snapshot) => {
+      this.fbDb.ref(`rooms/${currentRoomId}/market_tech`).on('value', (snapshot) => {
         callback(snapshot.val() || {});
       });
     } else {
       this.techCallbacks.push(callback);
-      const data = JSON.parse(localStorage.getItem('calon_market_tech') || '{}');
+      const data = JSON.parse(localStorage.getItem(`calon_market_tech_${currentRoomId}`) || '{}');
+      callback(data);
+    }
+  }
+
+  // Đăng ký sự kiện thay đổi trạng thái trận đấu
+  onStatusChange(callback) {
+    if (this.isFirebase) {
+      this.fbDb.ref(`rooms/${currentRoomId}/status`).on('value', (snapshot) => {
+        callback(snapshot.val() || { started: false, gameOver: false, timeLeft: 300, duration: 300 });
+      });
+    } else {
+      this.statusCallbacks.push(callback);
+      const data = JSON.parse(localStorage.getItem(`calon_status_${currentRoomId}`) || '{"started":false,"gameOver":false,"timeLeft":300,"duration":300}');
       callback(data);
     }
   }
@@ -92,25 +126,36 @@ class GameDatabase {
   // Cập nhật thông tin một người chơi
   updatePlayer(id, updates) {
     if (this.isFirebase) {
-      this.fbDb.ref(`players/${id}`).update(updates);
+      this.fbDb.ref(`rooms/${currentRoomId}/players/${id}`).update(updates);
     } else {
-      const players = JSON.parse(localStorage.getItem('calon_players') || '{}');
+      const players = JSON.parse(localStorage.getItem(`calon_players_${currentRoomId}`) || '{}');
       if (!players[id]) players[id] = {};
       players[id] = { ...players[id], ...updates };
-      localStorage.setItem('calon_players', JSON.stringify(players));
-      // Tự kích hoạt callbacks cho tab hiện tại (vì sự kiện storage chỉ kích hoạt ở các tab khác)
+      localStorage.setItem(`calon_players_${currentRoomId}`, JSON.stringify(players));
       this.playersCallbacks.forEach(cb => cb(players));
+    }
+  }
+
+  // Cập nhật trạng thái trận đấu
+  updateStatus(updates) {
+    if (this.isFirebase) {
+      this.fbDb.ref(`rooms/${currentRoomId}/status`).update(updates);
+    } else {
+      const status = JSON.parse(localStorage.getItem(`calon_status_${currentRoomId}`) || '{}');
+      const newStatus = { ...status, ...updates };
+      localStorage.setItem(`calon_status_${currentRoomId}`, JSON.stringify(newStatus));
+      this.statusCallbacks.forEach(cb => cb(newStatus));
     }
   }
 
   // Xóa một người chơi (ví dụ khi thoát)
   removePlayer(id) {
     if (this.isFirebase) {
-      this.fbDb.ref(`players/${id}`).remove();
+      this.fbDb.ref(`rooms/${currentRoomId}/players/${id}`).remove();
     } else {
-      const players = JSON.parse(localStorage.getItem('calon_players') || '{}');
+      const players = JSON.parse(localStorage.getItem(`calon_players_${currentRoomId}`) || '{}');
       delete players[id];
-      localStorage.setItem('calon_players', JSON.stringify(players));
+      localStorage.setItem(`calon_players_${currentRoomId}`, JSON.stringify(players));
       this.playersCallbacks.forEach(cb => cb(players));
     }
   }
@@ -119,7 +164,7 @@ class GameDatabase {
   claimFirstTech(techLevel, playerName, callback) {
     const key = `level_${techLevel}`;
     if (this.isFirebase) {
-      const ref = this.fbDb.ref(`market_tech/${key}`);
+      const ref = this.fbDb.ref(`rooms/${currentRoomId}/market_tech/${key}`);
       ref.transaction((currentVal) => {
         if (currentVal === null) {
           return playerName; // Trở thành người đầu tiên tiên phong công nghệ này
@@ -129,11 +174,11 @@ class GameDatabase {
         callback(committed, snapshot.val());
       });
     } else {
-      const techs = JSON.parse(localStorage.getItem('calon_market_tech') || '{}');
+      const techs = JSON.parse(localStorage.getItem(`calon_market_tech_${currentRoomId}`) || '{}');
       let committed = false;
       if (!techs[key]) {
         techs[key] = playerName;
-        localStorage.setItem('calon_market_tech', JSON.stringify(techs));
+        localStorage.setItem(`calon_market_tech_${currentRoomId}`, JSON.stringify(techs));
         committed = true;
         this.techCallbacks.forEach(cb => cb(techs));
       }
@@ -141,20 +186,41 @@ class GameDatabase {
     }
   }
 
-  // Khởi động lại dữ liệu thị trường (chỉ dành cho spectator khi load lại)
-  resetDatabase() {
+  // Reset dữ liệu phòng
+  resetRoom() {
     if (this.isFirebase) {
-      this.fbDb.ref('market_tech').remove();
+      this.fbDb.ref(`rooms/${currentRoomId}/market_tech`).remove();
+      this.fbDb.ref(`rooms/${currentRoomId}/players`).remove();
+      this.fbDb.ref(`rooms/${currentRoomId}/status`).set({
+        started: false,
+        gameOver: false,
+        timeLeft: 300,
+        duration: 300
+      });
     } else {
-      localStorage.setItem('calon_market_tech', JSON.stringify({}));
-      localStorage.setItem('calon_players', JSON.stringify({}));
+      localStorage.setItem(`calon_market_tech_${currentRoomId}`, JSON.stringify({}));
+      localStorage.setItem(`calon_players_${currentRoomId}`, JSON.stringify({}));
+      localStorage.setItem(`calon_status_${currentRoomId}`, JSON.stringify({
+        started: false,
+        gameOver: false,
+        timeLeft: 300,
+        duration: 300
+      }));
+      this.playersCallbacks.forEach(cb => cb({}));
+      this.techCallbacks.forEach(cb => cb({}));
+      this.statusCallbacks.forEach(cb => cb({ started: false, gameOver: false, timeLeft: 300, duration: 300 }));
     }
+  }
+
+  resetDatabase() {
+    // Chỉ reset dữ liệu phòng hiện tại để không ảnh hưởng tới phòng khác
+    this.resetRoom();
   }
 }
 
 const db = new GameDatabase();
 
-// Tự động chuyển đổi giữa Spectator và Player bằng cách thay đổi query URL
+// Tự động chuyển đổi giữa Spectator và Player
 function toggleRole() {
   const currentUrl = new URL(window.location.href);
   if (isSpectator) {
@@ -187,6 +253,13 @@ let canvas, ctx;
 let localPlayers = {};
 let marketTechData = {};
 let bubbles = [];
+let gameState = {
+  started: false,
+  gameOver: false,
+  timeLeft: 300,
+  duration: 300
+};
+let timerInterval = null;
 
 function initSpectator() {
   document.getElementById('spectatorView').classList.remove('hidden');
@@ -258,6 +331,28 @@ function initSpectator() {
     marketTechData = techs;
   });
 
+  // Đăng ký trạng thái phòng chơi (started, gameOver, timer)
+  db.onStatusChange((status) => {
+    gameState = status;
+    updateStatusUi(status);
+    
+    // Khởi chạy đồng hồ đếm ngược trên máy chiếu (Chỉ chạy trên máy spectator/host)
+    if (status.started && !timerInterval) {
+      startTimerTick();
+    } else if (!status.started && timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    // Hiển thị bục vinh danh khi kết thúc
+    if (status.gameOver) {
+      showVictoryPodium();
+    } else {
+      const podium = document.getElementById('podiumOverlay');
+      if (podium) podium.classList.add('hidden');
+    }
+  });
+
   // Bắt đầu vòng lặp game vẽ đại dương
   requestAnimationFrame(spectatorGameLoop);
 }
@@ -269,8 +364,8 @@ function resizeCanvas() {
 }
 
 function generateJoinQR() {
-  // Lấy link hiện tại để chế độ Player quét
-  let joinUrl = window.location.href.split('?')[0];
+  // Lấy link hiện tại để chế độ Player quét, tự động đính kèm mã phòng
+  let joinUrl = window.location.href.split('?')[0] + `?room=${currentRoomId}`;
   document.getElementById('joinUrl').href = joinUrl;
   document.getElementById('joinUrl').innerText = joinUrl;
 
@@ -387,54 +482,36 @@ function spectatorGameLoop() {
   // Cập nhật vị trí và vẽ cá
   const players = Object.values(localPlayers);
 
-  // 1. Cập nhật vị trí cá máy (Bots) & hành động tự động của chúng
-  players.forEach(p => {
-    if (p.isAI) {
-      // Cho bot bơi ngẫu nhiên
-      if (Math.random() < 0.02) {
-        p.vx = (Math.random() - 0.5) * 4;
-        p.vy = (Math.random() - 0.5) * 4;
-      }
-      // Giả lập bot làm việc trả lời câu hỏi và tăng máu chậm
-      if (Math.random() < 0.005) {
-        p.hp = Math.min(300, p.hp + 20);
-      }
-      // Dịch chuyển bot
-      p.x += p.vx;
-      p.y += p.vy;
-    } else {
-      // Người chơi thật: di chuyển dựa trên vx, vy nhận từ Firebase/LocalStorage
-      p.x += p.vx * 1.5;
-      p.y += p.vy * 1.5;
-    }
+  // Chỉ cho phép di chuyển và thâu tóm khi trận đấu đã bắt đầu và chưa kết thúc
+  if (gameState.started && !gameState.gameOver) {
+    players.forEach(p => {
+      // Dịch chuyển người chơi
+      p.x += (p.vx || 0) * 1.5;
+      p.y += (p.vy || 0) * 1.5;
 
-    // Đảm bảo cá không bơi ra ngoài biên thế giới ảo
-    p.x = Math.max(20, Math.min(WORLD_WIDTH - 20, p.x));
-    p.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, p.y));
-  });
+      // Đảm bảo cá không bơi ra ngoài biên thế giới ảo
+      p.x = Math.max(20, Math.min(WORLD_WIDTH - 20, p.x));
+      p.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, p.y));
+    });
 
-  // 2. Tính toán va chạm (Cá lớn nuốt cá bé - Tập trung tư bản)
-  for (let i = 0; i < players.length; i++) {
-    for (let j = 0; j < players.length; j++) {
-      if (i === j) continue;
-      const p1 = players[i];
-      const p2 = players[j];
+    // 2. Tính toán va chạm (Cá lớn nuốt cá bé)
+    for (let i = 0; i < players.length; i++) {
+      for (let j = 0; j < players.length; j++) {
+        if (i === j) continue;
+        const p1 = players[i];
+        const p2 = players[j];
 
-      // Bán kính cá phụ thuộc vào máu (HP)
-      // Cực kỳ quan trọng: quy mô tư bản đại diện bởi lượng máu
-      const r1 = 15 + Math.sqrt(p1.hp) * 2;
-      const r2 = 15 + Math.sqrt(p2.hp) * 2;
+        const r1 = 15 + Math.sqrt(p1.hp) * 2;
+        const r2 = 15 + Math.sqrt(p2.hp) * 2;
 
-      // Tính khoảng cách giữa 2 con cá
-      const dx = p1.x - p2.x;
-      const dy = p1.y - p2.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // Nếu chạm vào nhau
-      if (dist < r1 + r2) {
-        // Độc quyền/Thâu tóm: Cá lớn nuốt cá bé
-        if (p1.hp > p2.hp) {
-          executeBuyout(p1, p2);
+        if (dist < r1 + r2) {
+          if (p1.hp > p2.hp) {
+            executeBuyout(p1, p2);
+          }
         }
       }
     }
@@ -692,21 +769,30 @@ function initPlayer() {
       }
 
       // Kiểm tra xem có bị PHÁ SẢN (Bị nuốt mất HP = 0)
-      if (me.bankrupt && !document.getElementById('controllerScreen').classList.contains('hidden')) {
+      if (me.bankrupt && !document.getElementById('controllerScreen').classList.contains('hidden') && gameState.started && !gameState.gameOver) {
         showBankruptScreen();
       }
     }
   });
 
+  // Lắng nghe trạng thái trận đấu từ Host
+  db.onStatusChange((status) => {
+    gameState = status;
+    document.getElementById('playerRoomId').innerText = currentRoomId;
+    if (myPlayerName) {
+      updatePlayerScreens();
+    }
+  });
+
   setInterval(() => {
-    if (myPlayerId && currentHp > 0 && !document.getElementById('controllerScreen').classList.contains('hidden')) {
+    // Chỉ trừ hao mòn máu khi trận đấu đang diễn ra và cá còn sống
+    const isCtrlVisible = !document.getElementById('controllerScreen').classList.contains('hidden');
+    if (myPlayerId && currentHp > 0 && isCtrlVisible && gameState.started && !gameState.gameOver) {
       if (currentStrategy === 'absolute') {
-        // Tăng cường độ lao động làm hao mòn nhanh sức lực
         currentHp = Math.max(10, currentHp - 2.5); // Hao mòn 2.5 HP mỗi 2 giây
         db.updatePlayer(myPlayerId, { hp: currentHp });
       } else {
-        // Chế độ tương đối an toàn hơn, hao mòn rất nhẹ do di chuyển
-        currentHp = Math.max(10, currentHp - 0.5);
+        currentHp = Math.max(10, currentHp - 0.5); // Hao mòn 0.5 HP mỗi 2 giây
         db.updatePlayer(myPlayerId, { hp: currentHp });
       }
     }
@@ -714,6 +800,36 @@ function initPlayer() {
 
   // Khởi tạo bộ joystick di chuyển
   setupJoystick();
+}
+
+// Điều hướng màn hình phía Player dựa trên trạng thái game
+function updatePlayerScreens() {
+  const joinScr = document.getElementById('joinScreen');
+  const ctrlScr = document.getElementById('controllerScreen');
+  const lobbyScr = document.getElementById('lobbyScreen');
+  const bankruptScr = document.getElementById('bankruptScreen');
+  const overScr = document.getElementById('playerGameOverScreen');
+
+  joinScr.classList.add('hidden');
+  ctrlScr.classList.add('hidden');
+  lobbyScr.classList.add('hidden');
+  bankruptScr.classList.add('hidden');
+  overScr.classList.add('hidden');
+
+  if (gameState.gameOver) {
+    overScr.classList.remove('hidden');
+    document.getElementById('playerFinalScore').innerText = currentScore;
+    document.getElementById('playerFinalTech').innerText = TECH_LEVELS[currentTechLevel].name;
+    if (quizTimerInterval) clearInterval(quizTimerInterval);
+  } else if (!gameState.started) {
+    lobbyScr.classList.remove('hidden');
+  } else {
+    if (currentHp <= 0) {
+      bankruptScr.classList.remove('hidden');
+    } else {
+      ctrlScr.classList.remove('hidden');
+    }
+  }
 }
 
 // Bắt đầu khởi nghiệp (Đăng ký)
@@ -747,10 +863,8 @@ function handleJoin(e) {
     bankrupt: false
   });
 
-  // Chuyển màn hình
-  document.getElementById('joinScreen').classList.add('hidden');
-  document.getElementById('controllerScreen').classList.remove('hidden');
-  document.getElementById('bankruptScreen').classList.add('hidden');
+  // Điều hướng sang màn hình tương ứng
+  updatePlayerScreens();
 }
 
 // Chọn chiến lược sản xuất giá trị thặng dư
@@ -1053,6 +1167,116 @@ function showFeedback(isCorrect, titleText, explanationText, cssClass) {
     <strong>Góc Lý Thuyết:</strong><br>
     ${explanationText}
   `;
+}
+
+
+// ==================== CẤU HÌNH ĐIỀU KHIỂN ĐẤU (HOST & PODIUM) ====================
+
+// Bắt đầu trận đấu
+function startMatch() {
+  const durationSelect = document.getElementById('matchDuration');
+  const dur = parseInt(durationSelect.value) || 300;
+
+  db.updateStatus({
+    started: true,
+    gameOver: false,
+    timeLeft: dur,
+    duration: dur
+  });
+}
+
+// Dừng trận đấu sớm
+function stopMatch() {
+  db.updateStatus({
+    started: false,
+    gameOver: true
+  });
+}
+
+// Thiết lập trận đấu mới (Reset)
+function resetMatch() {
+  if (confirm("Bạn có chắc chắn muốn thiết lập trận mới? Tất cả người chơi và thặng dư tích lũy hiện tại trong phòng sẽ bị xóa.")) {
+    db.resetRoom();
+  }
+}
+
+// Bộ đếm ngược thời gian chạy trên máy chủ spectator
+function startTimerTick() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (gameState.started && gameState.timeLeft > 0) {
+      const newTime = gameState.timeLeft - 1;
+      db.updateStatus({ timeLeft: newTime });
+      if (newTime <= 0) {
+        clearInterval(timerInterval);
+        db.updateStatus({ started: false, gameOver: true });
+      }
+    }
+  }, 1000);
+}
+
+// Cập nhật giao diện Trạng thái / Đồng hồ trên máy chiếu
+function updateStatusUi(status) {
+  const statusBadge = document.getElementById('marketStatus');
+  const timerDisplay = document.getElementById('countdownDisplay');
+  const btnStart = document.getElementById('btnStartMatch');
+  const btnStop = document.getElementById('btnStopMatch');
+  
+  if (!statusBadge || !timerDisplay) return;
+
+  if (status.gameOver) {
+    statusBadge.innerHTML = `<i class="fa-solid fa-flag-checkered text-red"></i> Đã kết thúc`;
+    timerDisplay.classList.add('hidden');
+    if (btnStart) btnStart.classList.remove('hidden');
+    if (btnStop) btnStop.classList.add('hidden');
+  } else if (status.started) {
+    statusBadge.innerHTML = `<i class="fa-solid fa-circle-nodes text-green pulse-icon"></i> Đang diễn ra`;
+    
+    // Hiển thị đồng hồ dạng Phút:Giây
+    timerDisplay.classList.remove('hidden');
+    const mins = Math.floor(status.timeLeft / 60).toString().padStart(2, '0');
+    const secs = (status.timeLeft % 60).toString().padStart(2, '0');
+    timerDisplay.innerText = `${mins}:${secs}`;
+
+    if (btnStart) btnStart.classList.add('hidden');
+    if (btnStop) btnStop.classList.remove('hidden');
+  } else {
+    statusBadge.innerHTML = `<i class="fa-solid fa-clock text-blue"></i> Đang chờ...`;
+    timerDisplay.classList.add('hidden');
+    if (btnStart) btnStart.classList.remove('hidden');
+    if (btnStop) btnStop.classList.add('hidden');
+  }
+}
+
+// Tính toán và hiển thị Victory Podium
+function showVictoryPodium() {
+  const sorted = Object.values(localPlayers).sort((a, b) => b.score - a.score);
+  
+  const p1 = sorted[0] || { name: "Trống", score: 0, color: "#a4b0be" };
+  const p2 = sorted[1] || { name: "Trống", score: 0, color: "#a4b0be" };
+  const p3 = sorted[2] || { name: "Trống", score: 0, color: "#a4b0be" };
+
+  // Hạng 1
+  document.getElementById('nameRank1').innerText = p1.name;
+  document.getElementById('nameRank1').style.color = p1.color;
+  document.getElementById('scoreRank1').innerText = `${p1.score} m`;
+  document.getElementById('avatarRank1').style.background = p1.color;
+
+  // Hạng 2
+  document.getElementById('nameRank2').innerText = p2.name;
+  document.getElementById('nameRank2').style.color = p2.color;
+  document.getElementById('scoreRank2').innerText = `${p2.score} m`;
+  document.getElementById('avatarRank2').style.background = p2.color;
+
+  // Hạng 3
+  document.getElementById('nameRank3').innerText = p3.name;
+  document.getElementById('nameRank3').style.color = p3.color;
+  document.getElementById('scoreRank3').innerText = `${p3.score} m`;
+  document.getElementById('avatarRank3').style.background = p3.color;
+
+  // Hiển thị Overlay bục vinh danh
+  const overlay = document.getElementById('podiumOverlay');
+  if (overlay) overlay.classList.remove('hidden');
 }
 
 

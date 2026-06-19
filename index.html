@@ -33,7 +33,8 @@
                 </div>
             </div>
             <div class="game-timer-container">
-                <span id="marketStatus"><i class="fa-solid fa-circle-nodes pulse-icon"></i> Thị trường đang hoạt động</span>
+                <span id="marketStatus"><i class="fa-solid fa-circle-nodes pulse-icon"></i> Đang chờ...</span>
+                <span id="countdownDisplay" class="countdown-display hidden">05:00</span>
             </div>
         </header>
 
@@ -67,6 +68,61 @@
             <section class="canvas-panel">
                 <div class="canvas-container">
                     <canvas id="gameCanvas"></canvas>
+                    
+                    <!-- Bảng điều khiển Host (Ẩn/Hiện bằng CSS) -->
+                    <div id="hostPanel" class="host-panel">
+                        <div class="host-controls">
+                            <label for="matchDuration"><i class="fa-solid fa-clock"></i> Chọn thời gian:</label>
+                            <select id="matchDuration">
+                                <option value="60">1 Phút</option>
+                                <option value="180">3 Phút</option>
+                                <option value="300" selected>5 Phút</option>
+                                <option value="600">10 Phút</option>
+                            </select>
+                            <button id="btnStartMatch" class="btn btn-success" onclick="startMatch()"><i class="fa-solid fa-play"></i> Bắt đầu</button>
+                            <button id="btnStopMatch" class="btn btn-danger hidden" onclick="stopMatch()"><i class="fa-solid fa-stop"></i> Dừng</button>
+                        </div>
+                    </div>
+
+                    <!-- Bục Vinh Danh Podium khi kết thúc -->
+                    <div id="podiumOverlay" class="podium-overlay hidden">
+                        <div class="podium-content card">
+                            <h2>🏆 THỊ TRƯỜNG KẾT THÚC CẠNH TRANH 🏆</h2>
+                            <p class="podium-subtitle">Bảng vàng vinh danh các chủ tư bản thu được nhiều giá trị thặng dư (m) nhất</p>
+                            
+                            <div class="podium-ranks">
+                                <!-- Hạng 2 -->
+                                <div class="podium-col rank-2">
+                                    <div class="podium-avatar" id="avatarRank2"><i class="fa-solid fa-fish"></i></div>
+                                    <div class="podium-name" id="nameRank2">Doanh nghiệp B</div>
+                                    <div class="podium-score" id="scoreRank2">0 m</div>
+                                    <div class="podium-block">2</div>
+                                </div>
+                                <!-- Hạng 1 -->
+                                <div class="podium-col rank-1">
+                                    <div class="podium-crown"><i class="fa-solid fa-crown text-gold"></i></div>
+                                    <div class="podium-avatar" id="avatarRank1"><i class="fa-solid fa-fish"></i></div>
+                                    <div class="podium-name" id="nameRank1">Doanh nghiệp A</div>
+                                    <div class="podium-score" id="scoreRank1">0 m</div>
+                                    <div class="podium-block">1</div>
+                                </div>
+                                <!-- Hạng 3 -->
+                                <div class="podium-col rank-3">
+                                    <div class="podium-avatar" id="avatarRank3"><i class="fa-solid fa-fish"></i></div>
+                                    <div class="podium-name" id="nameRank3">Doanh nghiệp C</div>
+                                    <div class="podium-score" id="scoreRank3">0 m</div>
+                                    <div class="podium-block">3</div>
+                                </div>
+                            </div>
+                            
+                            <div class="podium-academic">
+                                <p><i class="fa-solid fa-graduation-cap"></i> <strong>Tổng kết:</strong> Quá trình cạnh tranh tự do dẫn đến tích tụ và tập trung tư bản. Các doanh nghiệp áp dụng công nghệ cao (thặng dư tương đối) hoặc quy mô vốn khổng lồ (thâu tóm đối thủ) sẽ thâu tóm thị trường, biến thành tổ chức độc quyền lớn thống trị.</p>
+                            </div>
+                            
+                            <button class="btn btn-warning" onclick="resetMatch()"><i class="fa-solid fa-rotate-left"></i> Thiết lập trận mới</button>
+                        </div>
+                    </div>
+
                     <div id="canvasOverlay" class="canvas-overlay hidden">
                         <div class="overlay-content">
                             <h2>Chưa kết nối Firebase</h2>
@@ -137,6 +193,18 @@
 
                 <button type="submit" class="btn btn-primary btn-block"><i class="fa-solid fa-play"></i> Bắt Đầu Khởi Nghiệp</button>
             </form>
+        </div>
+
+        <!-- Màn hình Chờ khởi động trận đấu (Lobby waiting) -->
+        <div id="lobbyScreen" class="player-subscreen card hidden">
+            <div class="lobby-waiting">
+                <i class="fa-solid fa-circle-notch fa-spin fa-4x text-blue pulse-icon"></i>
+                <h2>Đã Gia Nhập Phòng Chờ</h2>
+                <p class="room-indicator">Mã phòng: <span id="playerRoomId" class="text-blue">...</span></p>
+                <div class="lobby-details">
+                    <p>Hãy nhìn lên màn hình máy chiếu chính. Bạn sẽ bắt đầu di chuyển cá và làm việc trả lời Quiz khi Host kích hoạt trận đấu!</p>
+                </div>
+            </div>
         </div>
 
         <!-- 2. Màn hình Điều khiển Game chính -->
@@ -250,6 +318,20 @@
             </div>
 
             <button class="btn btn-danger btn-block" onclick="respawnPlayer()"><i class="fa-solid fa-rotate-left"></i> Tái Cấu Trúc (Hồi sinh)</button>
+        </div>
+
+        <!-- 4. Màn hình Trận đấu kết thúc -->
+        <div id="playerGameOverScreen" class="player-subscreen card hidden">
+            <div class="gameover-banner">
+                <i class="fa-solid fa-trophy fa-4x text-gold pulse-icon"></i>
+                <h2>HẾT GIỜ THI ĐẤU!</h2>
+                <p>Trận đấu đã khép lại. Hãy xem xếp hạng chung cuộc trên máy chiếu.</p>
+            </div>
+            <div class="bankrupt-stats">
+                <p>Thặng dư tích lũy ($m$) bạn đạt được: <strong id="playerFinalScore" class="text-gold">0</strong></p>
+                <p>Công nghệ sản xuất cuối cùng: <strong id="playerFinalTech" class="text-blue">...</strong></p>
+            </div>
+            <p class="explanation-academic"><i class="fa-solid fa-lightbulb"></i> Bạn đã đóng góp vào tổng giá trị thặng dư của nền kinh tế mô phỏng trong buổi học!</p>
         </div>
     </div>
 
