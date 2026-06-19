@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cá Lớn Nuốt Cá Bé - Thị Trường Giá Trị Thặng Dư</title>
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Firebase SDK (Compat Version để chạy không cần bundler) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+</head>
+<body>
+    <!-- Nút Đổi Chế Độ để kiểm thử dễ dàng -->
+    <div id="debugMenu" class="debug-menu">
+        <button id="btnToggleRole" onclick="toggleRole()"><i class="fa-solid fa-arrows-spin"></i> Đổi chế độ Spectator/Player</button>
+    </div>
+
+    <!-- ==================== MÀN HÌNH SPECTATOR (MÁY CHIẾU) ==================== -->
+    <div id="spectatorView" class="view-container hidden">
+        <header class="game-header">
+            <div class="logo">
+                <i class="fa-solid fa-fish-fins logo-icon"></i>
+                <div class="logo-text">
+                    <h1>CÁ LỚN NUỐT CÁ BÉ</h1>
+                    <p>Thị Trường Cạnh Tranh & Giá Trị Thặng Dư (MLN122)</p>
+                </div>
+            </div>
+            <div class="game-timer-container">
+                <span id="marketStatus"><i class="fa-solid fa-circle-nodes pulse-icon"></i> Thị trường đang hoạt động</span>
+            </div>
+        </header>
+
+        <main class="spectator-layout">
+            <!-- Cột Trái: Bảng xếp hạng và Thống kê -->
+            <section class="left-panel">
+                <div class="card leaderboard-card">
+                    <h2 class="card-title"><i class="fa-solid fa-ranking-star"></i> Bảng Xếp Hạng Doanh Nghiệp</h2>
+                    <div id="leaderboardList" class="leaderboard-list">
+                        <!-- Danh sách người chơi sẽ được render bằng JS -->
+                        <div class="no-player-msg">Đang chờ các chủ tư bản gia nhập...</div>
+                    </div>
+                </div>
+
+                <div class="card market-stats-card">
+                    <h2 class="card-title"><i class="fa-solid fa-chart-line"></i> Chỉ Số Thị Trường</h2>
+                    <div class="stat-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Tổng số Cá (Doanh nghiệp)</span>
+                            <span id="statTotalPlayers" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Tổng Thặng Dư Tích Lũy (m)</span>
+                            <span id="statTotalSurplus" class="stat-value">0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Cột Giữa: Đại Dương Game -->
+            <section class="canvas-panel">
+                <div class="canvas-container">
+                    <canvas id="gameCanvas"></canvas>
+                    <div id="canvasOverlay" class="canvas-overlay hidden">
+                        <div class="overlay-content">
+                            <h2>Chưa kết nối Firebase</h2>
+                            <p>Vui lòng cấu hình Firebase trong file `config.js` để bắt đầu game.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Cột Phải: QR Code & Hướng Dẫn -->
+            <section class="right-panel">
+                <div class="card qr-card">
+                    <h2 class="card-title"><i class="fa-solid fa-qrcode"></i> Quét Mã Để Gia Nhập</h2>
+                    <div id="qrcodeContainer" class="qr-container">
+                        <!-- Canvas mã QR sẽ được vẽ ở đây -->
+                        <div id="qrPlaceholder" class="qr-placeholder">
+                            <i class="fa-solid fa-qrcode fa-5x"></i>
+                            <p>Đang tạo mã QR...</p>
+                        </div>
+                    </div>
+                    <div class="qr-link">
+                        <span class="qr-label">Đường dẫn:</span>
+                        <a id="joinUrl" href="#" target="_blank" class="qr-url-text">Đang tải...</a>
+                    </div>
+                </div>
+
+                <div class="card manual-card">
+                    <h2 class="card-title"><i class="fa-solid fa-book-open"></i> Hướng Dẫn Luật Chơi</h2>
+                    <ul class="manual-list">
+                        <li><span class="badge blue">Quy mô (HP)</span> Quyết định sức mạnh. Trả lời đúng **Quiz** để tích lũy giá trị mới làm tăng HP.</li>
+                        <li><span class="badge red">Thâu tóm</span> Cá lớn nuốt cá bé. Nuốt thành công giúp tích lũy **Giá trị thặng dư (Score - m)**.</li>
+                        <li><span class="badge green">Nâng cấp</span> Dùng Điểm ($m$) cải tiến công nghệ, nâng cao vĩnh viễn năng suất lao động.</li>
+                        <li><span class="badge gold">Siêu ngạch</span> Người đầu tiên nâng cấp công nghệ mới được x3 HP trong thời gian giới hạn.</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+    </div>
+
+
+    <!-- ==================== MÀN HÌNH PLAYER (ĐIỆN THOẠI) ==================== -->
+    <div id="playerView" class="view-container">
+        <!-- 1. Màn hình Đăng ký / Join Game -->
+        <div id="joinScreen" class="player-subscreen card">
+            <div class="player-logo">
+                <i class="fa-solid fa-fish fa-3x logo-icon"></i>
+                <h2>Gia Nhập Thị Trường</h2>
+                <p>Khởi nghiệp doanh nghiệp tư bản của bạn</p>
+            </div>
+            
+            <form id="joinForm" onsubmit="handleJoin(event)">
+                <div class="form-group">
+                    <label for="playerName"><i class="fa-solid fa-id-card"></i> Tên Doanh Nghiệp (Người chơi)</label>
+                    <input type="text" id="playerName" placeholder="Nhập tên của bạn..." required maxlength="15">
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fa-solid fa-palette"></i> Màu Sắc Con Cá</label>
+                    <div class="color-picker">
+                        <label class="color-option" style="background: #ff4757;"><input type="radio" name="playerColor" value="#ff4757" checked></label>
+                        <label class="color-option" style="background: #2ed573;"><input type="radio" name="playerColor" value="#2ed573"></label>
+                        <label class="color-option" style="background: #1e90ff;"><input type="radio" name="playerColor" value="#1e90ff"></label>
+                        <label class="color-option" style="background: #ffa502;"><input type="radio" name="playerColor" value="#ffa502"></label>
+                        <label class="color-option" style="background: #e056fd;"><input type="radio" name="playerColor" value="#e056fd"></label>
+                        <label class="color-option" style="background: #00d2d3;"><input type="radio" name="playerColor" value="#00d2d3"></label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block"><i class="fa-solid fa-play"></i> Bắt Đầu Khởi Nghiệp</button>
+            </form>
+        </div>
+
+        <!-- 2. Màn hình Điều khiển Game chính -->
+        <div id="controllerScreen" class="player-subscreen hidden">
+            <!-- Header thông số của Người chơi -->
+            <div class="player-stats-bar">
+                <div class="p-stat">
+                    <span class="p-stat-label"><i class="fa-solid fa-heart text-red"></i> Quy mô (HP)</span>
+                    <span id="playerHp" class="p-stat-val">100</span>
+                </div>
+                <div class="p-stat">
+                    <span class="p-stat-label"><i class="fa-solid fa-coins text-gold"></i> Thặng dư (m)</span>
+                    <span id="playerScore" class="p-stat-val">0</span>
+                </div>
+                <div class="p-stat">
+                    <span class="p-stat-label"><i class="fa-solid fa-microchip text-blue"></i> Công nghệ</span>
+                    <span id="playerTech" class="p-stat-val text-blue">Gia công</span>
+                </div>
+            </div>
+
+            <!-- Tab chọn Phương pháp sản xuất -->
+            <div class="strategy-selector">
+                <button id="stratAbsolute" class="strat-btn active" onclick="selectStrategy('absolute')">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>T.Dư Tuyệt đối<br><small>(Cường độ cao)</small></span>
+                </button>
+                <button id="stratRelative" class="strat-btn" onclick="selectStrategy('relative')">
+                    <i class="fa-solid fa-gears"></i>
+                    <span>T.Dư Tương đối<br><small>(Công nghệ cao)</small></span>
+                </button>
+            </div>
+
+            <!-- Khu vực chính: Chia thành 2 cột hoặc Tabs (Quiz và Shop) trên mobile -->
+            <div class="main-controller-layout">
+                <!-- Khu vực Quiz (Lao động) -->
+                <div class="quiz-panel card">
+                    <div class="quiz-header">
+                        <h3><i class="fa-solid fa-brain text-blue"></i> Trực ca sản xuất (Lao động)</h3>
+                        <span id="quizStatus" class="quiz-status-badge">Đang sẵn sàng</span>
+                    </div>
+
+                    <div id="quizContent" class="quiz-content">
+                        <!-- Nút Bắt đầu ca lao động -->
+                        <div id="quizStartView" class="quiz-start-view">
+                            <p class="quiz-intro">Nhấp nút bên dưới để nhận việc và trả lời Quiz. Trả lời đúng sẽ tạo ra giá trị mới giúp con cá tăng trưởng quy mô (HP).</p>
+                            <button class="btn btn-success btn-block" onclick="loadNewQuiz()"><i class="fa-solid fa-hammer"></i> Bắt đầu ca lao động</button>
+                        </div>
+
+                        <!-- Panel câu hỏi thực tế -->
+                        <div id="quizActiveView" class="quiz-active-view hidden">
+                            <div class="quiz-timer-bar-container">
+                                <div id="quizTimerBar" class="quiz-timer-bar" style="width: 100%;"></div>
+                            </div>
+                            <h4 id="questionText" class="question-text">Câu hỏi hiển thị ở đây?</h4>
+                            <div id="answerOptions" class="answer-options">
+                                <!-- Render 4 đáp án từ JS -->
+                            </div>
+                        </div>
+
+                        <!-- Màn hình giải thích kết quả -->
+                        <div id="quizFeedbackView" class="quiz-feedback-view hidden">
+                            <div id="feedbackTitle" class="feedback-title">Chính Xác!</div>
+                            <p id="feedbackExplanation" class="feedback-explanation">Lời giải thích cho câu trả lời...</p>
+                            <button class="btn btn-primary btn-block" onclick="loadNewQuiz()"><i class="fa-solid fa-chevron-right"></i> Tiếp tục làm việc</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cửa hàng công nghệ & Hướng đi di chuyển -->
+                <div class="utility-panel">
+                    <!-- Shop Nâng Cấp Công Nghệ -->
+                    <div class="tech-shop card">
+                        <h3><i class="fa-solid fa-shop text-gold"></i> Đầu Tư Cải Tiến Kỹ Thuật</h3>
+                        <div class="shop-grid">
+                            <button id="btnUpgradeTech" class="btn btn-warning btn-block" onclick="buyUpgrade()">
+                                <i class="fa-solid fa-arrow-up-right-dots"></i> Nâng cấp lên <span id="nextTechName">Cơ khí hóa</span> 
+                                <br>
+                                <small>Hao phí: <span id="upgradeCost">30</span> m (Score)</small>
+                            </button>
+                        </div>
+                        <div class="tech-benefits">
+                            <p><i class="fa-solid fa-circle-info"></i> Công nghệ hiện tại: <span id="currentTechMultiplier">x1.0</span> hiệu suất HP.</p>
+                            <div id="superValueIndicator" class="super-value-tag hidden"><i class="fa-solid fa-star"></i> Đang hưởng thặng dư siêu ngạch (x3)!</div>
+                        </div>
+                    </div>
+
+                    <!-- Bộ điều khiển di chuyển ảo Joystick -->
+                    <div class="joystick-card card">
+                        <h3><i class="fa-solid fa-gamepad"></i> Điều Khiển Di Chuyển</h3>
+                        <p class="controller-help">Chạm và kéo núm xoay để bơi đi săn trên Máy Chiếu. Thả tay ra để cá dừng lại.</p>
+                        
+                        <div id="joystickZone" class="joystick-zone">
+                            <div id="joystickStick" class="joystick-stick"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Màn hình báo Bị Nuốt (Phá sản) -->
+        <div id="bankruptScreen" class="player-subscreen card hidden">
+            <div class="bankrupt-banner">
+                <i class="fa-solid fa-skull-crossbones fa-4x text-red pulse-icon"></i>
+                <h2>DOANH NGHIỆP PHÁ SẢN!</h2>
+                <p>Cá của bạn đã bị một đối thủ có quy mô tư bản lớn hơn thâu tóm!</p>
+            </div>
+            
+            <div class="bankrupt-stats">
+                <p>Thặng dư tích lũy ($m$) vẫn được giữ lại: <strong id="bankruptSavedScore" class="text-gold">0</strong></p>
+                <p class="explanation-academic"><i class="fa-solid fa-graduation-cap"></i> <strong>Góc học thuật:</strong> Trong thị trường tự do, quy luật cạnh tranh đào thải buộc các doanh nghiệp nhỏ phải sáp nhập hoặc phá sản trước các tập đoàn lớn hơn (Quá trình Tập trung tư bản).</p>
+            </div>
+
+            <button class="btn btn-danger btn-block" onclick="respawnPlayer()"><i class="fa-solid fa-rotate-left"></i> Tái Cấu Trúc (Hồi sinh)</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK (Chứa QR Code generator client-side) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <!-- Game Scripts -->
+    <script src="questions.js"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
