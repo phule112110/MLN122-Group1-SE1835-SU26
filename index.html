@@ -80,6 +80,9 @@
                                 <option value="600">10 Phút</option>
                             </select>
                             <button id="btnStartMatch" class="btn btn-success" onclick="startMatch()"><i class="fa-solid fa-play"></i> Bắt đầu</button>
+                            <button id="btnPauseMatch" class="btn btn-warning hidden" onclick="pauseMatch()"><i class="fa-solid fa-pause"></i> Tạm dừng</button>
+                            <button id="btnResumeMatch" class="btn btn-success hidden" onclick="resumeMatch()"><i class="fa-solid fa-circle-play"></i> Tiếp tục</button>
+                            <button id="btnRestartMatch" class="btn btn-warning hidden" onclick="restartMatch()"><i class="fa-solid fa-arrow-rotate-left"></i> Bắt đầu lại</button>
                             <button id="btnStopMatch" class="btn btn-danger hidden" onclick="stopMatch()"><i class="fa-solid fa-stop"></i> Dừng</button>
                         </div>
                     </div>
@@ -332,6 +335,18 @@
                 <p>Công nghệ sản xuất cuối cùng: <strong id="playerFinalTech" class="text-blue">...</strong></p>
             </div>
             <p class="explanation-academic"><i class="fa-solid fa-lightbulb"></i> Bạn đã đóng góp vào tổng giá trị thặng dư của nền kinh tế mô phỏng trong buổi học!</p>
+        </div>
+
+        <!-- 5. Màn hình Trận đấu Tạm dừng -->
+        <div id="playerPausedScreen" class="player-subscreen card hidden">
+            <div class="lobby-waiting">
+                <i class="fa-solid fa-circle-pause fa-4x text-gold pulse-icon"></i>
+                <h2>Trận Đấu Đang Tạm Dừng</h2>
+                <p>Host đã tạm dừng cuộc chơi để thuyết trình hoặc giải thích bài học.</p>
+                <div class="lobby-details">
+                    <p>Các tính năng di chuyển cá và làm Quiz tạm thời bị khóa. Vui lòng tập trung nghe bài giảng kinh tế chính trị từ người thuyết trình nhé!</p>
+                </div>
+            </div>
         </div>
     </div>
 

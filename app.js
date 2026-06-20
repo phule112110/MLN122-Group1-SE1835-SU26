@@ -58,6 +58,7 @@ class GameDatabase {
       if (!localStorage.getItem(`calon_status_${currentRoomId}`)) {
         localStorage.setItem(`calon_status_${currentRoomId}`, JSON.stringify({
           started: false,
+          paused: false,
           gameOver: false,
           timeLeft: 300,
           duration: 300
@@ -255,6 +256,7 @@ let marketTechData = {};
 let bubbles = [];
 let gameState = {
   started: false,
+  paused: false,
   gameOver: false,
   timeLeft: 300,
   duration: 300
@@ -482,8 +484,8 @@ function spectatorGameLoop() {
   // Cập nhật vị trí và vẽ cá
   const players = Object.values(localPlayers);
 
-  // Chỉ cho phép di chuyển và thâu tóm khi trận đấu đã bắt đầu và chưa kết thúc
-  if (gameState.started && !gameState.gameOver) {
+  // Chỉ cho phép di chuyển và thâu tóm khi trận đấu đã bắt đầu và KHÔNG bị tạm dừng
+  if (gameState.started && !gameState.paused && !gameState.gameOver) {
     players.forEach(p => {
       // Dịch chuyển người chơi
       p.x += (p.vx || 0) * 1.5;
@@ -515,6 +517,21 @@ function spectatorGameLoop() {
         }
       }
     }
+  }
+
+  // Nếu tạm dừng, hiển thị chữ thông báo trên Máy Chiếu
+  if (gameState.started && gameState.paused) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#ffa502';
+    ctx.font = 'bold 36px "Outfit", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏸️ TRẬN ĐẤU ĐẠI DƯƠNG TẠM DỪNG', canvas.width / 2, canvas.height / 2);
+    
+    ctx.fillStyle = '#a4b0be';
+    ctx.font = '16px "Outfit", sans-serif';
+    ctx.fillText('Vui lòng tập trung lắng nghe phân tích từ người thuyết trình!', canvas.width / 2, canvas.height / 2 + 40);
   }
 
   // 3. Vẽ cá lên màn hình
@@ -809,17 +826,22 @@ function updatePlayerScreens() {
   const lobbyScr = document.getElementById('lobbyScreen');
   const bankruptScr = document.getElementById('bankruptScreen');
   const overScr = document.getElementById('playerGameOverScreen');
+  const pauseScr = document.getElementById('playerPausedScreen');
 
   joinScr.classList.add('hidden');
   ctrlScr.classList.add('hidden');
   lobbyScr.classList.add('hidden');
   bankruptScr.classList.add('hidden');
   overScr.classList.add('hidden');
+  pauseScr.classList.add('hidden');
 
   if (gameState.gameOver) {
     overScr.classList.remove('hidden');
     document.getElementById('playerFinalScore').innerText = currentScore;
     document.getElementById('playerFinalTech').innerText = TECH_LEVELS[currentTechLevel].name;
+    if (quizTimerInterval) clearInterval(quizTimerInterval);
+  } else if (gameState.paused) {
+    pauseScr.classList.remove('hidden');
     if (quizTimerInterval) clearInterval(quizTimerInterval);
   } else if (!gameState.started) {
     lobbyScr.classList.remove('hidden');
@@ -1179,21 +1201,72 @@ function startMatch() {
 
   db.updateStatus({
     started: true,
+    paused: false,
     gameOver: false,
     timeLeft: dur,
     duration: dur
   });
 }
 
+// Tạm dừng trận đấu
+function pauseMatch() {
+  db.updateStatus({
+    paused: true
+  });
+}
+
+// Tiếp tục trận đấu
+function resumeMatch() {
+  db.updateStatus({
+    paused: false
+  });
+}
+
+// Bắt đầu lại trận đấu (Reset điểm/máu của tất cả cá về mặc định nhưng giữ danh sách tham gia)
+function restartMatch() {
+  if (confirm("Bạn có chắc chắn muốn bắt đầu lại trận đấu không? Máu, điểm và công nghệ của tất cả cá sẽ được reset nhưng người chơi vẫn ở trong phòng chờ.")) {
+    const dur = gameState.duration || 300;
+    
+    // Reset status
+    db.updateStatus({
+      started: true,
+      paused: false,
+      gameOver: false,
+      timeLeft: dur
+    });
+
+    // Reset thông số của tất cả cá hiện tại
+    for (let id in localPlayers) {
+      db.updatePlayer(id, {
+        hp: 100,
+        score: 0,
+        techLevel: 0,
+        vx: 0,
+        vy: 0,
+        hasExtraSurplus: false,
+        bankrupt: false
+      });
+    }
+
+    // Xóa dữ liệu công nghệ độc quyền trên thị trường phòng hiện tại
+    if (db.isFirebase) {
+      db.fbDb.ref(`rooms/${currentRoomId}/market_tech`).remove();
+    } else {
+      localStorage.setItem(`calon_market_tech_${currentRoomId}`, JSON.stringify({}));
+    }
+  }
+}
+
 // Dừng trận đấu sớm
 function stopMatch() {
   db.updateStatus({
     started: false,
+    paused: false,
     gameOver: true
   });
 }
 
-// Thiết lập trận đấu mới (Reset)
+// Thiết lập trận đấu mới (Reset hoàn toàn cả danh sách cá)
 function resetMatch() {
   if (confirm("Bạn có chắc chắn muốn thiết lập trận mới? Tất cả người chơi và thặng dư tích lũy hiện tại trong phòng sẽ bị xóa.")) {
     db.resetRoom();
@@ -1204,7 +1277,8 @@ function resetMatch() {
 function startTimerTick() {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
-    if (gameState.started && gameState.timeLeft > 0) {
+    // Chỉ đếm ngược khi trận đấu đang diễn ra và KHÔNG bị tạm dừng
+    if (gameState.started && !gameState.paused && gameState.timeLeft > 0) {
       const newTime = gameState.timeLeft - 1;
       db.updateStatus({ timeLeft: newTime });
       if (newTime <= 0) {
@@ -1219,7 +1293,11 @@ function startTimerTick() {
 function updateStatusUi(status) {
   const statusBadge = document.getElementById('marketStatus');
   const timerDisplay = document.getElementById('countdownDisplay');
+  
   const btnStart = document.getElementById('btnStartMatch');
+  const btnPause = document.getElementById('btnPauseMatch');
+  const btnResume = document.getElementById('btnResumeMatch');
+  const btnRestart = document.getElementById('btnRestartMatch');
   const btnStop = document.getElementById('btnStopMatch');
   
   if (!statusBadge || !timerDisplay) return;
@@ -1228,10 +1306,11 @@ function updateStatusUi(status) {
     statusBadge.innerHTML = `<i class="fa-solid fa-flag-checkered text-red"></i> Đã kết thúc`;
     timerDisplay.classList.add('hidden');
     if (btnStart) btnStart.classList.remove('hidden');
+    if (btnPause) btnPause.classList.add('hidden');
+    if (btnResume) btnResume.classList.add('hidden');
+    if (btnRestart) btnRestart.classList.add('hidden');
     if (btnStop) btnStop.classList.add('hidden');
   } else if (status.started) {
-    statusBadge.innerHTML = `<i class="fa-solid fa-circle-nodes text-green pulse-icon"></i> Đang diễn ra`;
-    
     // Hiển thị đồng hồ dạng Phút:Giây
     timerDisplay.classList.remove('hidden');
     const mins = Math.floor(status.timeLeft / 60).toString().padStart(2, '0');
@@ -1240,10 +1319,24 @@ function updateStatusUi(status) {
 
     if (btnStart) btnStart.classList.add('hidden');
     if (btnStop) btnStop.classList.remove('hidden');
+    if (btnRestart) btnRestart.classList.remove('hidden');
+
+    if (status.paused) {
+      statusBadge.innerHTML = `<i class="fa-solid fa-pause text-gold pulse-icon"></i> Đang tạm dừng`;
+      if (btnPause) btnPause.classList.add('hidden');
+      if (btnResume) btnResume.classList.remove('hidden');
+    } else {
+      statusBadge.innerHTML = `<i class="fa-solid fa-circle-nodes text-green pulse-icon"></i> Đang diễn ra`;
+      if (btnPause) btnPause.classList.remove('hidden');
+      if (btnResume) btnResume.classList.add('hidden');
+    }
   } else {
     statusBadge.innerHTML = `<i class="fa-solid fa-clock text-blue"></i> Đang chờ...`;
     timerDisplay.classList.add('hidden');
     if (btnStart) btnStart.classList.remove('hidden');
+    if (btnPause) btnPause.classList.add('hidden');
+    if (btnResume) btnResume.classList.add('hidden');
+    if (btnRestart) btnRestart.classList.add('hidden');
     if (btnStop) btnStop.classList.add('hidden');
   }
 }
