@@ -239,6 +239,16 @@ function toggleRole() {
 const WORLD_WIDTH = 1600;
 const WORLD_HEIGHT = 1000;
 
+// Các tham số cấu hình mặc định (có thể đồng bộ qua database)
+let gameConfig = {
+  initHp: 100,
+  drainAbs: 2.5,
+  drainRel: 0.5,
+  bonusAbs: 25,
+  bonusRel: 15,
+  extraTimer: 45
+};
+
 // Các cấp độ công nghệ (Sản xuất thặng dư tương đối)
 const TECH_LEVELS = [
   { level: 0, name: "Thủ công (Gia công)", multiplier: 1.0, cost: 0 },
@@ -338,6 +348,11 @@ function initSpectator() {
     gameState = status;
     updateStatusUi(status);
     
+    // Đồng bộ các thông số cấu hình từ Host
+    if (status.config) {
+      gameConfig = { ...gameConfig, ...status.config };
+    }
+    
     // Khởi chạy đồng hồ đếm ngược trên máy chiếu (Chỉ chạy trên máy spectator/host)
     if (status.started && !timerInterval) {
       startTimerTick();
@@ -408,6 +423,12 @@ function updateLeaderboard() {
     const techName = TECH_LEVELS[p.techLevel || 0].name;
     const stratName = p.strategy === 'absolute' ? 'Tuyệt đối ⚡' : 'Tương đối 🔬';
     
+    // Kick button shows for human players or AI bots
+    const isAI = p.isAI || p.id.startsWith('bot_');
+    const kickAction = isAI 
+      ? `removeAIPlayer('${p.id}')` 
+      : `kickPlayer('${p.id}')`;
+
     return `
       <div class="leaderboard-item">
         <div class="rank-badge ${rankClass}">${index + 1}</div>
@@ -423,9 +444,26 @@ function updateLeaderboard() {
           <span class="score-val">${p.score}</span>
           <span class="score-unit">thặng dư (m)</span>
         </div>
+        <button class="kick-btn" onclick="${kickAction}" title="Đuổi người chơi này"><i class="fa-solid fa-user-xmark"></i></button>
       </div>
     `;
   }).join('');
+}
+
+// Hàm kick người chơi
+function kickPlayer(playerId) {
+  if (confirm(`Bạn có chắc chắn muốn kick người chơi ${localPlayers[playerId] ? localPlayers[playerId].name : playerId} khỏi phòng?`)) {
+    db.updatePlayer(playerId, { kicked: true });
+  }
+}
+
+// Hàm xóa robot AI
+function removeAIPlayer(botId) {
+  if (confirm(`Bạn có muốn xóa bot ${localPlayers[botId] ? localPlayers[botId].name : botId}?`)) {
+    delete localPlayers[botId];
+    db.removePlayer(botId);
+    updateLeaderboard();
+  }
 }
 
 // AI Bots (Cá máy)
@@ -743,15 +781,35 @@ function initPlayer() {
     myPlayerId = sessionStorage.getItem('calon_my_id');
   }
 
+  // Pre-fill roomCode input if present in URL
+  const roomInput = document.getElementById('roomCode');
+  if (roomInput) {
+    if (urlParams.get('room')) {
+      roomInput.value = urlParams.get('room');
+    } else {
+      roomInput.value = currentRoomId;
+    }
+  }
+
   // Tự động giải phóng người chơi khi đóng tab điện thoại
   window.addEventListener('beforeunload', () => {
     if (myPlayerId) db.removePlayer(myPlayerId);
   });
 
-  // Lắng nghe dữ liệu người chơi của mình từ DB (để phát hiện bị nuốt)
+  // Lắng nghe dữ liệu người chơi của mình từ DB (để phát hiện bị nuốt hoặc bị kick)
   db.onPlayersChange((players) => {
     const me = players[myPlayerId];
     if (me) {
+      // Check if kicked
+      if (me.kicked) {
+        alert("Bạn đã bị Host mời ra khỏi phòng thi đấu!");
+        db.removePlayer(myPlayerId);
+        sessionStorage.removeItem('calon_my_id');
+        // Reload page to reset everything
+        window.location.reload();
+        return;
+      }
+
       currentHp = me.hp;
       currentScore = me.score;
       currentTechLevel = me.techLevel || 0;
@@ -796,6 +854,12 @@ function initPlayer() {
   db.onStatusChange((status) => {
     gameState = status;
     document.getElementById('playerRoomId').innerText = currentRoomId;
+    
+    // Đồng bộ các thông số cấu hình từ Host
+    if (status.config) {
+      gameConfig = { ...gameConfig, ...status.config };
+    }
+    
     if (myPlayerName) {
       updatePlayerScreens();
     }
@@ -806,10 +870,10 @@ function initPlayer() {
     const isCtrlVisible = !document.getElementById('controllerScreen').classList.contains('hidden');
     if (myPlayerId && currentHp > 0 && isCtrlVisible && gameState.started && !gameState.gameOver) {
       if (currentStrategy === 'absolute') {
-        currentHp = Math.max(10, currentHp - 2.5); // Hao mòn 2.5 HP mỗi 2 giây
+        currentHp = Math.max(10, currentHp - (gameConfig.drainAbs || 2.5)); // Hao mòn HP tuyệt đối động
         db.updatePlayer(myPlayerId, { hp: currentHp });
       } else {
-        currentHp = Math.max(10, currentHp - 0.5); // Hao mòn 0.5 HP mỗi 2 giây
+        currentHp = Math.max(10, currentHp - (gameConfig.drainRel || 0.5)); // Hao mòn HP tương đối động
         db.updatePlayer(myPlayerId, { hp: currentHp });
       }
     }
@@ -866,6 +930,40 @@ function handleJoin(e) {
     }
   }
 
+  const roomInput = document.getElementById('roomCode');
+  if (roomInput && roomInput.value.trim()) {
+    const inputRoom = roomInput.value.trim();
+    if (inputRoom !== currentRoomId) {
+      currentRoomId = inputRoom;
+      
+      // Update URL parameters without reloading
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('room', currentRoomId);
+      window.history.pushState({}, '', currentUrl.toString());
+
+      // If Firebase, we need to setup listeners again
+      if (db.isFirebase) {
+        // Remove old listeners
+        db.fbDb.ref(`rooms/${currentRoomId}/players`).off();
+        db.fbDb.ref(`rooms/${currentRoomId}/status`).off();
+        
+        // Re-setup players listener
+        db.fbDb.ref(`rooms/${currentRoomId}/players`).on('value', (snapshot) => {
+          const players = snapshot.val() || {};
+          // trigger the callbacks manually or just let it update
+          db.playersCallbacks.forEach(cb => cb(players));
+        });
+
+        // Re-setup status listener
+        db.fbDb.ref(`rooms/${currentRoomId}/status`).on('value', (snapshot) => {
+          const status = snapshot.val() || { started: false, gameOver: false, timeLeft: 300, duration: 300 };
+          gameState = status;
+          db.statusCallbacks.forEach(cb => cb(status));
+        });
+      }
+    }
+  }
+
   if (!myPlayerName) return;
 
   // Đăng ký người chơi lên Database
@@ -877,7 +975,7 @@ function handleJoin(e) {
     y: Math.random() * (WORLD_HEIGHT - 200) + 100,
     vx: 0,
     vy: 0,
-    hp: 100,
+    hp: gameConfig.initHp || 100,
     score: 0,
     strategy: currentStrategy,
     techLevel: 0,
@@ -920,15 +1018,15 @@ function buyUpgrade() {
     let getExtra = false;
     if (isFirst) {
       // Nhận giá trị thặng dư siêu ngạch!
-      getExtra = true;
-      alert(`🎉 BẠN LÀ NGƯỜI ĐẦU TIÊN áp dụng công nghệ "${TECH_LEVELS[nextLevel].name}" trên thị trường! Bạn nhận được Giá trị thặng dư siêu ngạch (x3 HP khi làm Quiz) trong 45 giây.`);
+      const extraTimeSecs = gameConfig.extraTimer || 45;
+      alert(`🎉 BẠN LÀ NGƯỜI ĐẦU TIÊN áp dụng công nghệ "${TECH_LEVELS[nextLevel].name}" trên thị trường! Bạn nhận được Giá trị thặng dư siêu ngạch (x3 HP khi làm Quiz) trong ${extraTimeSecs} giây.`);
       
-      // Hết hạn sau 45 giây
+      // Hết hạn sau thời gian cấu hình
       if (extraSurplusTimer) clearTimeout(extraSurplusTimer);
       extraSurplusTimer = setTimeout(() => {
         db.updatePlayer(myPlayerId, { hasExtraSurplus: false });
         alert("Giá trị thặng dư siêu ngạch của bạn đã biến mất vì công nghệ đã bị xã hội hóa (các đối thủ khác cũng đã bắt kịp).");
-      }, 45000);
+      }, extraTimeSecs * 1000);
     } else {
       alert(`Bạn đã nâng cấp thành công lên "${TECH_LEVELS[nextLevel].name}". Công nghệ này đã được phát minh bởi ${pioneerName}, bạn nhận được giá trị thặng dư tương đối tiêu chuẩn.`);
     }
@@ -1043,7 +1141,7 @@ function showBankruptScreen() {
 
 // Hồi sinh người chơi (Tái cấu trúc)
 function respawnPlayer() {
-  currentHp = 100;
+  currentHp = gameConfig.initHp || 100;
   
   db.updatePlayer(myPlayerId, {
     hp: currentHp,
@@ -1144,10 +1242,10 @@ function submitAnswer(selectedIdx) {
 
   if (isCorrect) {
     // 1. Tính toán lượng HP phần thưởng theo chiến lược
-    let baseHp = 15;
+    let baseHp = gameConfig.bonusRel || 15;
     
     if (currentStrategy === 'absolute') {
-      baseHp = 25; // Tuyệt đối: Trả lời đúng nhận nhiều HP hơn
+      baseHp = gameConfig.bonusAbs || 25; // Tuyệt đối: Trả lời đúng nhận nhiều HP hơn
     }
 
     // Nhân hệ số công nghệ
@@ -1370,6 +1468,45 @@ function showVictoryPodium() {
   // Hiển thị Overlay bục vinh danh
   const overlay = document.getElementById('podiumOverlay');
   if (overlay) overlay.classList.remove('hidden');
+}
+
+
+// ==================== CẤU HÌNH THÔNG SỐ MODAL HANDLERS ====================
+
+function openSettingsModal() {
+  document.getElementById('cfgInitHp').value = gameConfig.initHp || 100;
+  document.getElementById('cfgDrainAbs').value = gameConfig.drainAbs || 2.5;
+  document.getElementById('cfgDrainRel').value = gameConfig.drainRel || 0.5;
+  document.getElementById('cfgBonusAbs').value = gameConfig.bonusAbs || 25;
+  document.getElementById('cfgBonusRel').value = gameConfig.bonusRel || 15;
+  document.getElementById('cfgExtraTimer').value = gameConfig.extraTimer || 45;
+
+  document.getElementById('settingsOverlay').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  document.getElementById('settingsOverlay').classList.add('hidden');
+}
+
+function saveSettings(e) {
+  e.preventDefault();
+  
+  const updatedConfig = {
+    initHp: parseInt(document.getElementById('cfgInitHp').value) || 100,
+    drainAbs: parseFloat(document.getElementById('cfgDrainAbs').value) || 2.5,
+    drainRel: parseFloat(document.getElementById('cfgDrainRel').value) || 0.5,
+    bonusAbs: parseInt(document.getElementById('cfgBonusAbs').value) || 25,
+    bonusRel: parseInt(document.getElementById('cfgBonusRel').value) || 15,
+    extraTimer: parseInt(document.getElementById('cfgExtraTimer').value) || 45
+  };
+
+  // Sync to database under config property of status
+  db.updateStatus({
+    config: updatedConfig
+  });
+
+  alert("Cấu hình thông số đã được lưu và đồng bộ tới toàn bộ người chơi!");
+  closeSettingsModal();
 }
 
 

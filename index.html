@@ -84,6 +84,62 @@
                             <button id="btnResumeMatch" class="btn btn-success hidden" onclick="resumeMatch()"><i class="fa-solid fa-circle-play"></i> Tiếp tục</button>
                             <button id="btnRestartMatch" class="btn btn-warning hidden" onclick="restartMatch()"><i class="fa-solid fa-arrow-rotate-left"></i> Bắt đầu lại</button>
                             <button id="btnStopMatch" class="btn btn-danger hidden" onclick="stopMatch()"><i class="fa-solid fa-stop"></i> Dừng</button>
+                            <button id="btnOpenSettings" class="btn btn-primary" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); box-shadow: none;" onclick="openSettingsModal()"><i class="fa-solid fa-sliders"></i> Cấu hình</button>
+                        </div>
+                    </div>
+
+                    <!-- Màn hình/Modal cấu hình thông số -->
+                    <div id="settingsOverlay" class="canvas-overlay hidden" style="z-index: 1000; background: rgba(5, 10, 24, 0.85); backdrop-filter: blur(10px);">
+                        <div class="card settings-modal-content" style="width: 90%; max-width: 500px; padding: 24px; border: 1px solid var(--color-cyan); box-shadow: 0 0 30px rgba(0, 210, 211, 0.2);">
+                            <h2 style="font-size: 20px; font-weight: 800; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid fa-sliders text-blue"></i> Cấu Hình Thông Số Kinh Tế
+                            </h2>
+                            <form id="settingsForm" onsubmit="saveSettings(event)" style="display: flex; flex-direction: column; gap: 16px; text-align: left;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                        <i class="fa-solid fa-battery-half text-red"></i> HP khởi tạo của Cá
+                                    </label>
+                                    <input type="number" id="cfgInitHp" value="100" min="50" max="300" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                            <i class="fa-solid fa-skull text-red"></i> Trừ HP/2s (Tuyệt đối)
+                                        </label>
+                                        <input type="number" id="cfgDrainAbs" value="2.5" step="0.1" min="0" max="10" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                            <i class="fa-solid fa-shield-halved text-blue"></i> Trừ HP/2s (Tương đối)
+                                        </label>
+                                        <input type="number" id="cfgDrainRel" value="0.5" step="0.1" min="0" max="5" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                    </div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                            <i class="fa-solid fa-heart-pulse text-green"></i> HP Cộng Thêm (Tuyệt đối)
+                                        </label>
+                                        <input type="number" id="cfgBonusAbs" value="25" min="5" max="100" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                            <i class="fa-solid fa-notes-medical text-green"></i> HP Cộng Thêm (Tương đối)
+                                        </label>
+                                        <input type="number" id="cfgBonusRel" value="15" min="5" max="100" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                        <i class="fa-solid fa-star text-gold"></i> Thời gian thặng dư siêu ngạch (giây)
+                                    </label>
+                                    <input type="number" id="cfgExtraTimer" value="45" min="10" max="180" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                </div>
+                                <div style="display: flex; gap: 12px; margin-top: 10px;">
+                                    <button type="button" class="btn" style="flex: 1; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);" onclick="closeSettingsModal()">Hủy</button>
+                                    <button type="submit" class="btn btn-success" style="flex: 1;"><i class="fa-solid fa-check"></i> Lưu cấu hình</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
 
@@ -180,6 +236,11 @@
                 <div class="form-group">
                     <label for="playerName"><i class="fa-solid fa-id-card"></i> Tên Doanh Nghiệp (Người chơi)</label>
                     <input type="text" id="playerName" placeholder="Nhập tên của bạn..." required maxlength="15">
+                </div>
+                
+                <div class="form-group">
+                    <label for="roomCode"><i class="fa-solid fa-door-open"></i> Mã Phòng</label>
+                    <input type="text" id="roomCode" placeholder="Nhập mã phòng (ví dụ: room_1234)..." required maxlength="15">
                 </div>
                 
                 <div class="form-group">

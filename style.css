@@ -329,6 +329,7 @@ body {
 
 .player-score {
     text-align: right;
+    margin-right: 8px;
 }
 
 .score-val {
@@ -342,6 +343,32 @@ body {
     font-size: 9px;
     display: block;
     color: var(--text-secondary);
+}
+
+/* Kick button styling */
+.kick-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-red);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 6px;
+    border-radius: 6px;
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.leaderboard-item:hover .kick-btn {
+    opacity: 0.8;
+}
+
+.kick-btn:hover {
+    opacity: 1 !important;
+    background: rgba(255, 71, 87, 0.15);
+    box-shadow: 0 0 8px rgba(255, 71, 87, 0.3);
 }
 
 /* Market Stats */
