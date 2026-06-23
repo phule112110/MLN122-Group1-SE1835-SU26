@@ -101,39 +101,32 @@
                                     </label>
                                     <input type="number" id="cfgInitHp" value="100" min="50" max="300" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
                                 </div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
-                                            <i class="fa-solid fa-skull text-red"></i> Trừ HP/2s (Tuyệt đối)
-                                        </label>
-                                        <input type="number" id="cfgDrainAbs" value="2.5" step="0.1" min="0" max="10" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
-                                            <i class="fa-solid fa-shield-halved text-blue"></i> Trừ HP/2s (Tương đối)
-                                        </label>
-                                        <input type="number" id="cfgDrainRel" value="0.5" step="0.1" min="0" max="5" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
-                                    </div>
-                                </div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
-                                            <i class="fa-solid fa-heart-pulse text-green"></i> HP Cộng Thêm (Tuyệt đối)
-                                        </label>
-                                        <input type="number" id="cfgBonusAbs" value="25" min="5" max="100" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
-                                            <i class="fa-solid fa-notes-medical text-green"></i> HP Cộng Thêm (Tương đối)
-                                        </label>
-                                        <input type="number" id="cfgBonusRel" value="15" min="5" max="100" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
-                                    </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                        <i class="fa-solid fa-heart-pulse text-green"></i> HP Cộng Thêm cơ bản khi trả lời đúng
+                                    </label>
+                                    <input type="number" id="cfgBonusAbs" value="20" min="5" max="100" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
                                 </div>
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
-                                        <i class="fa-solid fa-star text-gold"></i> Thời gian thặng dư siêu ngạch (giây)
+                                        <i class="fa-solid fa-clock text-gold"></i> Thời gian hồi combo thặng dư siêu ngạch (giây)
                                     </label>
-                                    <input type="number" id="cfgExtraTimer" value="45" min="10" max="180" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                    <input type="number" id="cfgExtraTimer" value="5" min="2" max="15" required style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; color: #fff; outline: none;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px;">
+                                    <label style="display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500;">
+                                        <i class="fa-solid fa-file-import text-blue"></i> Nhập câu hỏi từ File (.json, .txt, .docx)
+                                    </label>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="file" id="quizFileInput" accept=".json,.txt,.docx" style="display: none;" onchange="handleQuizImport(event)">
+                                        <button type="button" class="btn" style="background: rgba(30, 144, 255, 0.2); color: #70a1ff; border: 1px solid rgba(30, 144, 255, 0.3); font-size: 13px; padding: 8px 16px; border-radius: 8px;" onclick="document.getElementById('quizFileInput').click()">
+                                            <i class="fa-solid fa-upload"></i> Chọn file câu hỏi
+                                        </button>
+                                        <span id="importStatus" style="font-size: 12px; color: var(--text-secondary);">Mặc định (15 câu)</span>
+                                    </div>
+                                    <p style="font-size: 10px; color: var(--text-secondary); margin-top: 6px; line-height: 1.4;">
+                                        * Đối với <b>.docx / .txt</b>, mỗi câu bắt đầu bằng: <code>Câu 1: Câu hỏi...</code>, tiếp theo là đáp án bắt đầu bằng chữ cái: <code>A. Đáp án...</code>. Đáp án đúng ghi: <code>Đáp án đúng: A</code> (hoặc B, C, D) và lời giải thích: <code>Giải thích: ...</code>.
+                                    </p>
                                 </div>
                                 <div style="display: flex; gap: 12px; margin-top: 10px;">
                                     <button type="button" class="btn" style="flex: 1; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);" onclick="closeSettingsModal()">Hủy</button>
@@ -274,7 +267,7 @@
         <!-- 2. Màn hình Điều khiển Game chính -->
         <div id="controllerScreen" class="player-subscreen hidden">
             <!-- Header thông số của Người chơi -->
-            <div class="player-stats-bar">
+            <div class="player-stats-bar" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px;">
                 <div class="p-stat">
                     <span class="p-stat-label"><i class="fa-solid fa-heart text-red"></i> Quy mô (HP)</span>
                     <span id="playerHp" class="p-stat-val">100</span>
@@ -283,22 +276,6 @@
                     <span class="p-stat-label"><i class="fa-solid fa-coins text-gold"></i> Thặng dư (m)</span>
                     <span id="playerScore" class="p-stat-val">0</span>
                 </div>
-                <div class="p-stat">
-                    <span class="p-stat-label"><i class="fa-solid fa-microchip text-blue"></i> Công nghệ</span>
-                    <span id="playerTech" class="p-stat-val text-blue">Gia công</span>
-                </div>
-            </div>
-
-            <!-- Tab chọn Phương pháp sản xuất -->
-            <div class="strategy-selector">
-                <button id="stratAbsolute" class="strat-btn active" onclick="selectStrategy('absolute')">
-                    <i class="fa-solid fa-bolt"></i>
-                    <span>T.Dư Tuyệt đối<br><small>(Cường độ cao)</small></span>
-                </button>
-                <button id="stratRelative" class="strat-btn" onclick="selectStrategy('relative')">
-                    <i class="fa-solid fa-gears"></i>
-                    <span>T.Dư Tương đối<br><small>(Công nghệ cao)</small></span>
-                </button>
             </div>
 
             <!-- Khu vực chính: Chia thành 2 cột hoặc Tabs (Quiz và Shop) trên mobile -->
@@ -307,10 +284,13 @@
                 <div class="quiz-panel card">
                     <div class="quiz-header">
                         <h3><i class="fa-solid fa-brain text-blue"></i> Trực ca sản xuất (Lao động)</h3>
-                        <span id="quizStatus" class="quiz-status-badge">Đang sẵn sàng</span>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <span id="playerComboIndicator" class="combo-badge hidden">Combo x0 🔥</span>
+                            <span id="quizStatus" class="quiz-status-badge">Đang sẵn sàng</span>
+                        </div>
                     </div>
 
-                    <div id="quizContent" class="quiz-content">
+                    <div id="quizContent" class="quiz-content" style="position: relative;">
                         <!-- Nút Bắt đầu ca lao động -->
                         <div id="quizStartView" class="quiz-start-view">
                             <p class="quiz-intro">Nhấp nút bên dưới để nhận việc và trả lời Quiz. Trả lời đúng sẽ tạo ra giá trị mới giúp con cá tăng trưởng quy mô (HP).</p>
@@ -319,7 +299,7 @@
 
                         <!-- Panel câu hỏi thực tế -->
                         <div id="quizActiveView" class="quiz-active-view hidden">
-                            <div class="quiz-timer-bar-container">
+                            <div class="quiz-timer-bar-container" style="display: none;">
                                 <div id="quizTimerBar" class="quiz-timer-bar" style="width: 100%;"></div>
                             </div>
                             <h4 id="questionText" class="question-text">Câu hỏi hiển thị ở đây?</h4>
@@ -333,6 +313,13 @@
                             <div id="feedbackTitle" class="feedback-title">Chính Xác!</div>
                             <p id="feedbackExplanation" class="feedback-explanation">Lời giải thích cho câu trả lời...</p>
                             <button class="btn btn-primary btn-block" onclick="loadNewQuiz()"><i class="fa-solid fa-chevron-right"></i> Tiếp tục làm việc</button>
+                        </div>
+
+                        <!-- Panel Báo Choáng khi trả lời sai -->
+                        <div id="quizStunView" class="quiz-stun-view hidden" style="text-align: center; padding: 20px 10px;">
+                            <i class="fa-solid fa-circle-exclamation fa-3x text-gold pulse-icon" style="margin-bottom: 12px; color: #ffa502;"></i>
+                            <h4 style="color: #ffa502; font-size: 18px; margin-bottom: 8px;">Đình Trệ Sản Xuất (Bị Choáng)</h4>
+                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">Bạn đã trả lời sai. Vui lòng đợi <span id="stunCountdown" style="font-weight: 800; color: #ffa502; font-size: 16px;">3</span> giây để khôi phục.</p>
                         </div>
                     </div>
                 </div>
@@ -350,8 +337,8 @@
                             </button>
                         </div>
                         <div class="tech-benefits">
-                            <p><i class="fa-solid fa-circle-info"></i> Công nghệ hiện tại: <span id="currentTechMultiplier">x1.0</span> hiệu suất HP.</p>
-                            <div id="superValueIndicator" class="super-value-tag hidden"><i class="fa-solid fa-star"></i> Đang hưởng thặng dư siêu ngạch (x3)!</div>
+                            <p><i class="fa-solid fa-circle-info"></i> Công nghệ hiện tại giúp tăng kích cỡ cá cơ bản.</p>
+                            <div id="superValueIndicator" class="super-value-tag hidden"><i class="fa-solid fa-fire"></i> Đang kích hoạt combo Thặng Dư Siêu Ngạch!</div>
                         </div>
                     </div>
 
@@ -413,6 +400,9 @@
 
     <!-- Firebase SDK (Chứa QR Code generator client-side) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <!-- Mammoth.js for client-side Word .docx parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
 
     <!-- Game Scripts -->
     <script src="questions.js"></script>

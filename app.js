@@ -242,11 +242,8 @@ const WORLD_HEIGHT = 1000;
 // Các tham số cấu hình mặc định (có thể đồng bộ qua database)
 let gameConfig = {
   initHp: 100,
-  drainAbs: 2.5,
-  drainRel: 0.5,
-  bonusAbs: 25,
-  bonusRel: 15,
-  extraTimer: 45
+  bonusAbs: 20, // Điểm cộng máu cơ bản
+  extraTimer: 5  // Thời gian duy trì combo thặng dư siêu ngạch (mặc định 5s)
 };
 
 // Các cấp độ công nghệ (Sản xuất thặng dư tương đối)
@@ -321,11 +318,14 @@ function initSpectator() {
         localPlayers[id].color = players[id].color;
         localPlayers[id].hp = players[id].hp;
         localPlayers[id].score = players[id].score;
-        localPlayers[id].strategy = players[id].strategy;
         localPlayers[id].techLevel = players[id].techLevel;
         localPlayers[id].hasExtraSurplus = players[id].hasExtraSurplus;
         localPlayers[id].vx = players[id].vx || 0;
         localPlayers[id].vy = players[id].vy || 0;
+        localPlayers[id].invulnUntil = players[id].invulnUntil || 0;
+        localPlayers[id].stunnedUntil = players[id].stunnedUntil || 0;
+        localPlayers[id].comboUntil = players[id].comboUntil || 0;
+        localPlayers[id].combo = players[id].combo || 0;
       }
     }
 
@@ -351,6 +351,16 @@ function initSpectator() {
     // Đồng bộ các thông số cấu hình từ Host
     if (status.config) {
       gameConfig = { ...gameConfig, ...status.config };
+    }
+    
+    // Đồng bộ danh sách câu hỏi tùy chọn được import
+    if (status.customQuestions && status.customQuestions.length > 0) {
+      QUESTIONS.length = 0;
+      QUESTIONS.push(...status.customQuestions);
+      const impStatusEl = document.getElementById('importStatus');
+      if (impStatusEl) {
+        impStatusEl.innerText = `Đã nhập: ${status.customQuestions.length} câu`;
+      }
     }
     
     // Khởi chạy đồng hồ đếm ngược trên máy chiếu (Chỉ chạy trên máy spectator/host)
@@ -524,10 +534,18 @@ function spectatorGameLoop() {
 
   // Chỉ cho phép di chuyển và thâu tóm khi trận đấu đã bắt đầu và KHÔNG bị tạm dừng
   if (gameState.started && !gameState.paused && !gameState.gameOver) {
+    const now = Date.now();
     players.forEach(p => {
-      // Dịch chuyển người chơi
-      p.x += (p.vx || 0) * 1.5;
-      p.y += (p.vy || 0) * 1.5;
+      // Dịch chuyển người chơi (nếu bị choáng thì đứng yên)
+      const isStun = p.stunnedUntil && p.stunnedUntil > now;
+      if (!isStun) {
+        // Tăng tốc 15% cho cá có combo từ x4 trở lên
+        const hasComboSpeed = p.comboUntil && p.comboUntil > now && (p.combo || 0) >= 4;
+        const speedMult = hasComboSpeed ? 1.15 : 1.0;
+
+        p.x += (p.vx || 0) * 1.5 * speedMult;
+        p.y += (p.vy || 0) * 1.5 * speedMult;
+      }
 
       // Đảm bảo cá không bơi ra ngoài biên thế giới ảo
       p.x = Math.max(20, Math.min(WORLD_WIDTH - 20, p.x));
@@ -541,6 +559,13 @@ function spectatorGameLoop() {
         const p1 = players[i];
         const p2 = players[j];
 
+        if (p1.hp <= 0 || p2.hp <= 0) continue;
+
+        // Bỏ qua va chạm nếu một trong hai cá đang bất tử
+        const p1Invuln = p1.invulnUntil && p1.invulnUntil > now;
+        const p2Invuln = p2.invulnUntil && p2.invulnUntil > now;
+        if (p1Invuln || p2Invuln) continue;
+
         const r1 = 15 + Math.sqrt(p1.hp) * 2;
         const r2 = 15 + Math.sqrt(p2.hp) * 2;
 
@@ -549,7 +574,24 @@ function spectatorGameLoop() {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < r1 + r2) {
-          if (p1.hp > p2.hp) {
+          const hp1 = Math.round(p1.hp);
+          const hp2 = Math.round(p2.hp);
+
+          if (hp1 === hp2) {
+            // Hòa: Đẩy lùi (knockback) và choáng 2s
+            const overlap = (r1 + r2) - dist;
+            const nx = dist > 0 ? dx / dist : (Math.random() - 0.5);
+            const ny = dist > 0 ? dy / dist : (Math.random() - 0.5);
+
+            p1.x += nx * (overlap / 2 + 10);
+            p1.y += ny * (overlap / 2 + 10);
+            p2.x -= nx * (overlap / 2 + 10);
+            p2.y -= ny * (overlap / 2 + 10);
+
+            // Cập nhật choáng lên DB
+            db.updatePlayer(p1.id, { stunnedUntil: now + 2000, vx: 0, vy: 0 });
+            db.updatePlayer(p2.id, { stunnedUntil: now + 2000, vx: 0, vy: 0 });
+          } else if (hp1 > hp2) {
             executeBuyout(p1, p2);
           }
         }
@@ -576,6 +618,33 @@ function spectatorGameLoop() {
   players.forEach(p => {
     drawFish(p, scaleX, scaleY);
   });
+
+  // Hiển thị countdown đếm ngược đầu trận ngay trên bể cá
+  if (gameState.started && !gameState.paused && !gameState.gameOver) {
+    const prepTimeLeft = gameState.timeLeft - (gameState.duration - 10);
+    if (prepTimeLeft > 0 && prepTimeLeft <= 10) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(6, 10, 23, 0.4)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#00d2d3';
+      ctx.font = 'bold 24px "Outfit", sans-serif';
+      ctx.fillText('⚡ THỜI GIAN BẢO VỆ (BẤT TỬ) ⚡', canvas.width / 2, canvas.height / 2 - 60);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 80px "Outfit", sans-serif';
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#00d2d3';
+      ctx.fillText(prepTimeLeft, canvas.width / 2, canvas.height / 2 + 20);
+      
+      ctx.fillStyle = '#a4b0be';
+      ctx.font = '16px "Outfit", sans-serif';
+      ctx.shadowBlur = 0;
+      ctx.fillText('Hãy làm Quiz tích lũy HP trước khi cuộc đi săn bắt đầu!', canvas.width / 2, canvas.height / 2 + 70);
+      ctx.restore();
+    }
+  }
 
   requestAnimationFrame(spectatorGameLoop);
 }
@@ -729,6 +798,57 @@ function drawFish(p, scaleX, scaleY) {
 
   ctx.restore();
 
+  const now = Date.now();
+  const isInvuln = p.invulnUntil && p.invulnUntil > now;
+  const isStun = p.stunnedUntil && p.stunnedUntil > now;
+  const hasCombo = p.comboUntil && p.comboUntil > now && (p.combo || 0) > 0;
+
+  // Vẽ ngọn lửa neon rực cháy nếu có combo
+  if (hasCombo) {
+    ctx.save();
+    ctx.strokeStyle = '#ffa502';
+    ctx.lineWidth = 2 + Math.sin(Date.now() * 0.01) * 1.5;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#ff4757';
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, radius * 1.25, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Vẽ lá chắn bất tử
+  if (isInvuln) {
+    ctx.save();
+    ctx.strokeStyle = '#00d2d3';
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#00d2d3';
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, radius * 1.35, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Hiển thị đếm ngược bất tử
+    const secsLeft = Math.ceil((p.invulnUntil - now) / 1000);
+    ctx.font = 'bold 10px "Outfit", sans-serif';
+    ctx.fillStyle = '#00d2d3';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${secsLeft}s Bất tử`, drawX, drawY - radius - 26);
+  }
+
+  // Vẽ hoạt ảnh choáng (Stun)
+  if (isStun) {
+    ctx.save();
+    ctx.translate(drawX, drawY - radius - 26);
+    const spin = (Date.now() * 0.005) % (Math.PI * 2);
+    ctx.rotate(spin);
+    ctx.fillStyle = '#ffa502';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('💫', 0, 4);
+    ctx.restore();
+  }
+
   // Hiển thị tên người chơi và HP phía trên
   ctx.shadowBlur = 0;
   ctx.font = 'bold 12px "Outfit", sans-serif';
@@ -748,7 +868,7 @@ function drawFish(p, scaleX, scaleY) {
   
   // Tỉ lệ máu
   const hpPercent = Math.min(1.0, p.hp / 300);
-  ctx.fillStyle = p.hasExtraSurplus ? '#ffa502' : p.hp > 150 ? '#2ed573' : p.hp > 60 ? '#1e90ff' : '#ff4757';
+  ctx.fillStyle = hasCombo ? '#ffa502' : p.hp > 150 ? '#2ed573' : p.hp > 60 ? '#1e90ff' : '#ff4757';
   ctx.fillRect(drawX - barW/2, drawY - radius - 8, barW * hpPercent, barH);
 }
 
@@ -761,9 +881,15 @@ let myPlayerColor = '';
 let currentHp = 100;
 let currentScore = 0;
 let currentTechLevel = 0;
-let currentStrategy = 'absolute'; // 'absolute' hoặc 'relative'
-let hasExtraSurplus = false;
-let extraSurplusTimer = null;
+
+// Combo & Trạng thái hiệu ứng mới
+let myCombo = 0;
+let comboTimer = null;
+let isStunned = false;
+let isInvulnerable = false;
+let invulnerableTimer = null;
+let myPlayerData = null;
+let playerTimerInterval = null;
 
 // Quản lý câu hỏi trắc nghiệm
 let activeQuestion = null;
@@ -800,6 +926,7 @@ function initPlayer() {
   db.onPlayersChange((players) => {
     const me = players[myPlayerId];
     if (me) {
+      myPlayerData = me;
       // Check if kicked
       if (me.kicked) {
         alert("Bạn đã bị Host mời ra khỏi phòng thi đấu!");
@@ -814,14 +941,17 @@ function initPlayer() {
       currentScore = me.score;
       currentTechLevel = me.techLevel || 0;
       hasExtraSurplus = me.hasExtraSurplus || false;
+      myCombo = me.combo || 0;
 
       // Cập nhật UI
       document.getElementById('playerHp').innerText = Math.round(currentHp);
       document.getElementById('playerScore').innerText = currentScore;
       
       const techName = TECH_LEVELS[currentTechLevel].name;
-      document.getElementById('playerTech').innerText = techName;
-      document.getElementById('currentTechMultiplier').innerText = 'x' + TECH_LEVELS[currentTechLevel].multiplier.toFixed(1);
+      const ptEl = document.getElementById('playerTech');
+      if (ptEl) ptEl.innerText = techName;
+      const ctmEl = document.getElementById('currentTechMultiplier');
+      if (ctmEl) ctmEl.innerText = 'x' + TECH_LEVELS[currentTechLevel].multiplier.toFixed(1);
 
       // Cập nhật nút nâng cấp công nghệ tiếp theo
       const nextLevel = currentTechLevel + 1;
@@ -860,27 +990,85 @@ function initPlayer() {
       gameConfig = { ...gameConfig, ...status.config };
     }
     
+    // Đồng bộ danh sách câu hỏi tùy chọn được import từ Host
+    if (status.customQuestions && status.customQuestions.length > 0) {
+      QUESTIONS.length = 0; // Xóa câu hỏi mặc định
+      QUESTIONS.push(...status.customQuestions); // Điền câu hỏi mới từ DB
+    }
+    
     if (myPlayerName) {
       updatePlayerScreens();
     }
   });
 
-  setInterval(() => {
-    // Chỉ trừ hao mòn máu khi trận đấu đang diễn ra và cá còn sống
-    const isCtrlVisible = !document.getElementById('controllerScreen').classList.contains('hidden');
-    if (myPlayerId && currentHp > 0 && isCtrlVisible && gameState.started && !gameState.gameOver) {
-      if (currentStrategy === 'absolute') {
-        currentHp = Math.max(10, currentHp - (gameConfig.drainAbs || 2.5)); // Hao mòn HP tuyệt đối động
-        db.updatePlayer(myPlayerId, { hp: currentHp });
-      } else {
-        currentHp = Math.max(10, currentHp - (gameConfig.drainRel || 0.5)); // Hao mòn HP tương đối động
-        db.updatePlayer(myPlayerId, { hp: currentHp });
-      }
-    }
-  }, 2000);
-
   // Khởi tạo bộ joystick di chuyển
   setupJoystick();
+
+  // Khởi động vòng lặp đếm ngược local của người chơi để giảm tải DB
+  if (playerTimerInterval) clearInterval(playerTimerInterval);
+  playerTimerInterval = setInterval(() => {
+    if (!myPlayerData) return;
+    const now = Date.now();
+
+    // 1. Kiểm tra trạng thái Choáng (Stun)
+    const stunnedUntil = myPlayerData.stunnedUntil || 0;
+    const stunEl = document.getElementById('quizStunView');
+    const quizStartEl = document.getElementById('quizStartView');
+    const quizActiveEl = document.getElementById('quizActiveView');
+    const quizFeedbackEl = document.getElementById('quizFeedbackView');
+
+    if (stunnedUntil > now) {
+      isStunned = true;
+      const secsLeft = Math.ceil((stunnedUntil - now) / 1000);
+      const countdownEl = document.getElementById('stunCountdown');
+      if (countdownEl) countdownEl.innerText = secsLeft;
+
+      // Ẩn tất cả các view quiz khác để hiện màn hình choáng
+      if (quizStartEl) quizStartEl.classList.add('hidden');
+      if (quizActiveEl) quizActiveEl.classList.add('hidden');
+      if (quizFeedbackEl) quizFeedbackEl.classList.add('hidden');
+      if (stunEl) stunEl.classList.remove('hidden');
+    } else {
+      if (isStunned) {
+        isStunned = false;
+        if (stunEl) stunEl.classList.add('hidden');
+        // Quay trở lại màn hình bắt đầu Quiz khi hết choáng
+        if (quizStartEl) quizStartEl.classList.remove('hidden');
+      }
+    }
+
+    // 2. Kiểm tra trạng thái Combo
+    const comboUntil = myPlayerData.comboUntil || 0;
+    const comboVal = myPlayerData.combo || 0;
+    const comboIndicator = document.getElementById('playerComboIndicator');
+    if (comboIndicator) {
+      if (comboUntil > now && comboVal > 0) {
+        comboIndicator.innerText = `Combo x${comboVal} 🔥`;
+        comboIndicator.classList.remove('hidden');
+      } else {
+        comboIndicator.classList.add('hidden');
+        // Reset combo cục bộ và đồng bộ lên DB nếu đã hết hạn
+        if (myCombo > 0) {
+          myCombo = 0;
+          db.updatePlayer(myPlayerId, { combo: 0, comboUntil: 0 });
+        }
+      }
+    }
+
+    // 3. Cập nhật nút bấm Tiếp tục ở màn hình giải thích (nếu có combo)
+    if (quizFeedbackEl && !quizFeedbackEl.classList.contains('hidden') && myCombo > 0 && comboUntil > now) {
+      const secsComboLeft = Math.ceil((comboUntil - now) / 1000);
+      const nextBtn = quizFeedbackEl.querySelector('button');
+      if (nextBtn) {
+        nextBtn.innerHTML = `<i class="fa-solid fa-chevron-right"></i> Tiếp tục làm việc (Giữ combo: ${secsComboLeft}s)`;
+      }
+    } else if (quizFeedbackEl && !quizFeedbackEl.classList.contains('hidden')) {
+      const nextBtn = quizFeedbackEl.querySelector('button');
+      if (nextBtn) {
+        nextBtn.innerHTML = `<i class="fa-solid fa-chevron-right"></i> Tiếp tục làm việc`;
+      }
+    }
+  }, 100);
 }
 
 // Điều hướng màn hình phía Player dựa trên trạng thái game
@@ -977,26 +1165,20 @@ function handleJoin(e) {
     vy: 0,
     hp: gameConfig.initHp || 100,
     score: 0,
-    strategy: currentStrategy,
     techLevel: 0,
     hasExtraSurplus: false,
-    bankrupt: false
+    bankrupt: false,
+    combo: 0,
+    comboUntil: 0,
+    invulnUntil: Date.now() + 10000,
+    stunnedUntil: 0
   });
 
   // Điều hướng sang màn hình tương ứng
   updatePlayerScreens();
 }
 
-// Chọn chiến lược sản xuất giá trị thặng dư
-function selectStrategy(strategy) {
-  if (currentStrategy === strategy) return;
-  currentStrategy = strategy;
 
-  document.getElementById('stratAbsolute').classList.toggle('active', strategy === 'absolute');
-  document.getElementById('stratRelative').classList.toggle('active', strategy === 'relative');
-
-  db.updatePlayer(myPlayerId, { strategy: currentStrategy });
-}
 
 // Cải tiến công nghệ (Mua nâng cấp)
 function buyUpgrade() {
@@ -1060,6 +1242,7 @@ function setupJoystick() {
   };
 
   const handleStart = (clientX, clientY) => {
+    if (isStunned) return;
     active = true;
     updateCenter();
     handleMove(clientX, clientY);
@@ -1067,6 +1250,10 @@ function setupJoystick() {
 
   const handleMove = (clientX, clientY) => {
     if (!active) return;
+    if (isStunned) {
+      handleEnd();
+      return;
+    }
     
     let dx = clientX - startX;
     let dy = clientY - startY;
@@ -1149,7 +1336,11 @@ function respawnPlayer() {
     y: Math.random() * (WORLD_HEIGHT - 200) + 100,
     vx: 0,
     vy: 0,
-    bankrupt: false
+    bankrupt: false,
+    combo: 0,
+    comboUntil: 0,
+    invulnUntil: Date.now() + 10000,
+    stunnedUntil: 0
   });
 
   document.getElementById('bankruptScreen').classList.add('hidden');
@@ -1190,32 +1381,11 @@ function loadNewQuiz() {
     optionsContainer.appendChild(btn);
   });
 
-  // Hẹn giờ làm bài (Tùy thuộc chiến lược chọn)
-  // Chiến lược Tuyệt đối: thời gian làm rất ngắn (15s), Tương đối: dài hơn (25s)
-  let timeLeft = currentStrategy === 'absolute' ? 12 : 24;
-  const initialTime = timeLeft;
-  
-  const timerBar = document.getElementById('quizTimerBar');
-  timerBar.style.width = '100%';
-  timerBar.style.backgroundColor = 'var(--color-cyan)';
-
-  if (quizTimerInterval) clearInterval(quizTimerInterval);
-  
-  quizTimerInterval = setInterval(() => {
-    timeLeft--;
-    const percent = (timeLeft / initialTime) * 100;
-    timerBar.style.width = percent + '%';
-
-    // Đổi màu thanh hỏa tốc khi sắp hết giờ
-    if (timeLeft < 4) {
-      timerBar.style.backgroundColor = 'var(--color-red)';
-    }
-
-    if (timeLeft <= 0) {
-      clearInterval(quizTimerInterval);
-      handleQuizTimeout();
-    }
-  }, 1000);
+  // Hẹn giờ làm bài đã bị loại bỏ (không có giới hạn thời gian trả lời câu hỏi)
+  const timerBarContainer = document.querySelector('.quiz-timer-bar-container');
+  if (timerBarContainer) {
+    timerBarContainer.style.display = 'none'; // Ẩn thanh thời gian
+  }
 }
 
 // Báo hết giờ trả lời
@@ -1223,7 +1393,7 @@ function handleQuizTimeout() {
   document.getElementById('quizStatus').innerText = "Hết giờ làm việc";
   
   // Trừ máu do suy nhược / kiệt sức
-  const penalty = currentStrategy === 'absolute' ? 15 : 5;
+  const penalty = 10;
   currentHp = Math.max(10, currentHp - penalty);
   db.updatePlayer(myPlayerId, { hp: currentHp });
 
@@ -1241,15 +1411,20 @@ function submitAnswer(selectedIdx) {
   let textClass = "";
 
   if (isCorrect) {
-    // 1. Tính toán lượng HP phần thưởng theo chiến lược
-    let baseHp = gameConfig.bonusRel || 15;
+    // 1. Tính toán lượng HP phần thưởng theo combo
+    myCombo++;
+    const now = Date.now();
+    const comboUntil = now + 5000; // Combo kéo dài 5 giây
     
-    if (currentStrategy === 'absolute') {
-      baseHp = gameConfig.bonusAbs || 25; // Tuyệt đối: Trả lời đúng nhận nhiều HP hơn
-    }
-
+    // HP cơ bản
+    const baseHp = gameConfig.bonusAbs || 20;
     // Nhân hệ số công nghệ
-    rewardHp = baseHp * TECH_LEVELS[currentTechLevel].multiplier;
+    const techMultiplier = TECH_LEVELS[currentTechLevel].multiplier;
+    const initHp = gameConfig.initHp || 100;
+    
+    // Tăng phúc: combo x2 tăng 25% máu gốc, x3 tăng 50%, x4 trở lên tăng 75%
+    const comboBonus = myCombo >= 2 ? (initHp * (myCombo - 1) / 4) : 0;
+    rewardHp = (baseHp * techMultiplier) + comboBonus;
 
     // Nhân hệ số thặng dư siêu ngạch nếu có
     if (hasExtraSurplus) {
@@ -1257,18 +1432,31 @@ function submitAnswer(selectedIdx) {
     }
 
     currentHp = Math.min(300, currentHp + rewardHp);
-    textTitle = `CHÍNH XÁC! (+${Math.round(rewardHp)} HP)`;
+    textTitle = `CHÍNH XÁC! (+${Math.round(rewardHp)} HP)${myCombo >= 2 ? ' Combo x' + myCombo + '! 🔥' : ''}`;
     textClass = "correct";
-  } else {
-    // Trả lời sai: Phạt HP
-    const penalty = currentStrategy === 'absolute' ? 15 : 5;
-    currentHp = Math.max(10, currentHp - penalty);
-    textTitle = `SAI RỒI! (-${penalty} HP)`;
-    textClass = "incorrect";
-  }
 
-  // Đồng bộ HP mới lên Database
-  db.updatePlayer(myPlayerId, { hp: currentHp });
+    // Đồng bộ HP, combo và comboUntil lên DB
+    db.updatePlayer(myPlayerId, { 
+      hp: currentHp,
+      combo: myCombo,
+      comboUntil: comboUntil
+    });
+  } else {
+    // Trả lời sai: Không trừ máu mà bị choáng 3 giây
+    myCombo = 0;
+    const stunnedUntil = Date.now() + 3000;
+    textTitle = `SAI RỒI! BỊ CHOÁNG 3 GIÂY`;
+    textClass = "incorrect";
+
+    // Đồng bộ choáng lên DB và reset vận tốc
+    db.updatePlayer(myPlayerId, { 
+      stunnedUntil: stunnedUntil,
+      combo: 0,
+      comboUntil: 0,
+      vx: 0, 
+      vy: 0 
+    });
+  }
 
   // Hiển thị màn hình giải thích
   showFeedback(isCorrect, textTitle, activeQuestion.explanation, textClass);
@@ -1342,7 +1530,11 @@ function restartMatch() {
         vx: 0,
         vy: 0,
         hasExtraSurplus: false,
-        bankrupt: false
+        bankrupt: false,
+        combo: 0,
+        comboUntil: 0,
+        invulnUntil: Date.now() + 10000,
+        stunnedUntil: 0
       });
     }
 
@@ -1475,11 +1667,8 @@ function showVictoryPodium() {
 
 function openSettingsModal() {
   document.getElementById('cfgInitHp').value = gameConfig.initHp || 100;
-  document.getElementById('cfgDrainAbs').value = gameConfig.drainAbs || 2.5;
-  document.getElementById('cfgDrainRel').value = gameConfig.drainRel || 0.5;
-  document.getElementById('cfgBonusAbs').value = gameConfig.bonusAbs || 25;
-  document.getElementById('cfgBonusRel').value = gameConfig.bonusRel || 15;
-  document.getElementById('cfgExtraTimer').value = gameConfig.extraTimer || 45;
+  document.getElementById('cfgBonusAbs').value = gameConfig.bonusAbs || 20;
+  document.getElementById('cfgExtraTimer').value = gameConfig.extraTimer || 5;
 
   document.getElementById('settingsOverlay').classList.remove('hidden');
 }
@@ -1493,20 +1682,180 @@ function saveSettings(e) {
   
   const updatedConfig = {
     initHp: parseInt(document.getElementById('cfgInitHp').value) || 100,
-    drainAbs: parseFloat(document.getElementById('cfgDrainAbs').value) || 2.5,
-    drainRel: parseFloat(document.getElementById('cfgDrainRel').value) || 0.5,
-    bonusAbs: parseInt(document.getElementById('cfgBonusAbs').value) || 25,
-    bonusRel: parseInt(document.getElementById('cfgBonusRel').value) || 15,
-    extraTimer: parseInt(document.getElementById('cfgExtraTimer').value) || 45
+    bonusAbs: parseInt(document.getElementById('cfgBonusAbs').value) || 20,
+    extraTimer: parseInt(document.getElementById('cfgExtraTimer').value) || 5
   };
 
-  // Sync to database under config property of status
-  db.updateStatus({
+  const statusUpdates = {
     config: updatedConfig
-  });
+  };
+
+  // Nếu có file câu hỏi được import, đồng bộ lên Database
+  if (customQuizData) {
+    statusUpdates.customQuestions = customQuizData;
+  }
+
+  // Sync to database under status
+  db.updateStatus(statusUpdates);
 
   alert("Cấu hình thông số đã được lưu và đồng bộ tới toàn bộ người chơi!");
   closeSettingsModal();
+}
+
+// Xử lý import file câu hỏi trắc nghiệm (JSON)
+let customQuizData = null;
+
+function handleQuizImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const extension = file.name.split('.').pop().toLowerCase();
+
+  if (extension === 'docx') {
+    const reader = new FileReader();
+    reader.onload = function(loadEvent) {
+      const arrayBuffer = loadEvent.target.result;
+      mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+        .then(function(result) {
+          const text = result.value;
+          parseQuizText(text);
+        })
+        .catch(function(err) {
+          alert("Lỗi khi đọc file Word: " + err.message);
+        });
+    };
+    reader.readAsArrayBuffer(file);
+  } else if (extension === 'txt') {
+    const reader = new FileReader();
+    reader.onload = function(loadEvent) {
+      parseQuizText(loadEvent.target.result);
+    };
+    reader.readAsText(file);
+  } else if (extension === 'json') {
+    const reader = new FileReader();
+    reader.onload = function(loadEvent) {
+      try {
+        const data = JSON.parse(loadEvent.target.result);
+        if (!Array.isArray(data)) {
+          alert("Định dạng file không hợp lệ! File phải là một mảng JSON các câu hỏi.");
+          return;
+        }
+        const valid = data.every(q => 
+          q.question && 
+          Array.isArray(q.answers) && 
+          q.answers.length >= 2 && 
+          typeof q.correct === 'number'
+        );
+        if (!valid) {
+          alert("Một số câu hỏi bị thiếu trường bắt buộc (question, answers, correct).");
+          return;
+        }
+        customQuizData = data;
+        document.getElementById('importStatus').innerText = `Đã chọn: ${data.length} câu`;
+        document.getElementById('importStatus').style.color = '#2ed573';
+      } catch (err) {
+        alert("Lỗi cú pháp file JSON: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  } else {
+    alert("Hệ thống chỉ hỗ trợ định dạng file .json, .txt hoặc .docx!");
+  }
+}
+
+// Bộ phân tích cú pháp câu hỏi từ văn bản thuần (.docx trích xuất hoặc .txt)
+function parseQuizText(text) {
+  try {
+    // Tách dòng văn bản và chuẩn hóa
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const parsedQuestions = [];
+    let currentQuestion = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Nhận diện câu hỏi: "Câu 1:", "Câu 12:", "Câu 1." hoặc "Question 1:"
+      const questionMatch = line.match(/^(?:Câu|Question)\s*(\d+)[\s.:]+(.*)$/i);
+      if (questionMatch) {
+        if (currentQuestion) {
+          // Lưu câu hỏi trước đó nếu hợp lệ
+          if (validateParsedQuestion(currentQuestion)) {
+            parsedQuestions.push(currentQuestion);
+          }
+        }
+        currentQuestion = {
+          id: parseInt(questionMatch[1]),
+          question: questionMatch[2].trim(),
+          answers: [],
+          correct: -1,
+          explanation: ""
+        };
+        continue;
+      }
+
+      if (!currentQuestion) continue;
+
+      // Nhận diện đáp án lựa chọn: "A. ...", "B: ...", "C) ..."
+      const optionMatch = line.match(/^([A-D])[\s.:)]+(.*)$/i);
+      if (optionMatch) {
+        const optionLetter = optionMatch[1].toUpperCase();
+        const optionText = optionMatch[2].trim();
+        currentQuestion.answers.push(optionText);
+        continue;
+      }
+
+      // Nhận diện đáp án đúng: "Đáp án đúng: A", "Đáp án: B", "Correct: C"
+      const correctMatch = line.match(/^(?:Đáp án đúng|Đáp án|Correct|Correct Answer)[\s.:]+([A-D])/i);
+      if (correctMatch) {
+        const correctLetter = correctMatch[1].toUpperCase();
+        // A -> 0, B -> 1, C -> 2, D -> 3
+        currentQuestion.correct = correctLetter.charCodeAt(0) - 65;
+        continue;
+      }
+
+      // Nhận diện giải thích: "Giải thích:", "Explanation:"
+      const explanationMatch = line.match(/^(?:Giải thích|Explanation)[\s.:]+(.*)$/i);
+      if (explanationMatch) {
+        currentQuestion.explanation = explanationMatch[1].trim();
+        continue;
+      }
+
+      // Nếu dòng tiếp theo không khớp từ khóa nào, và ta đã có giải thích thì nối tiếp vào giải thích
+      if (currentQuestion.explanation) {
+        currentQuestion.explanation += " " + line;
+      }
+    }
+
+    // Push câu hỏi cuối cùng
+    if (currentQuestion && validateParsedQuestion(currentQuestion)) {
+      parsedQuestions.push(currentQuestion);
+    }
+
+    if (parsedQuestions.length === 0) {
+      alert("Không trích xuất được câu hỏi nào từ file! Vui lòng kiểm tra lại cấu trúc soạn thảo.");
+      return;
+    }
+
+    customQuizData = parsedQuestions;
+    document.getElementById('importStatus').innerText = `Đã trích xuất: ${parsedQuestions.length} câu`;
+    document.getElementById('importStatus').style.color = '#2ed573';
+  } catch (err) {
+    alert("Lỗi khi phân tích cú pháp câu hỏi: " + err.message);
+  }
+}
+
+// Hàm xác thực câu hỏi trích xuất từ text
+function validateParsedQuestion(q) {
+  if (!q.question) return false;
+  if (q.answers.length < 2) return false;
+  if (q.correct < 0 || q.correct >= q.answers.length) {
+    // Nếu chưa nhận diện được đáp án đúng, đặt mặc định là 0 (A) để không lỗi runtime
+    q.correct = 0;
+  }
+  if (!q.explanation) {
+    q.explanation = "Không có lời giải thích cụ thể cho câu hỏi này.";
+  }
+  return true;
 }
 
 
