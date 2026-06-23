@@ -261,6 +261,8 @@ let canvas, ctx;
 let localPlayers = {};
 let marketTechData = {};
 let bubbles = [];
+const bgImage = new Image();
+bgImage.src = 'ocean_bg.png';
 let gameState = {
   started: false,
   paused: false,
@@ -515,9 +517,13 @@ function manageAICompetitors() {
 function spectatorGameLoop() {
   if (!isSpectator) return;
 
-  // Xóa màn hình với màu xanh navy sẫm
-  ctx.fillStyle = '#060a17';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Vẽ hình nền Đại dương nếu đã tải xong, ngược lại xóa bằng màu sẫm
+  if (bgImage.complete && bgImage.naturalWidth !== 0) {
+    ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = '#060a17';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   // Vẽ lưới kinh tế mờ (Mạng lưới thị trường)
   drawMarketGrid();
