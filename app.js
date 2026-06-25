@@ -262,7 +262,7 @@ let localPlayers = {};
 let marketTechData = {};
 let bubbles = [];
 const bgImage = new Image();
-bgImage.src = 'ocean_bg.png';
+bgImage.src = 'picture/backgroud.jpg';
 let gameState = {
   started: false,
   paused: false,
