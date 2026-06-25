@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Câu Hỏi - Cá Lớn Nuốt Cá Bé</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- CSS Style -->
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* CSS bổ sung dành riêng cho trang quản trị câu hỏi */
+        body {
+            background-color: #060a17;
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+        .admin-title h1 {
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0 0 5px 0;
+            background: linear-gradient(135deg, #00d2d3, #70a1ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .admin-title p {
+            color: var(--text-secondary, #a4b0be);
+            margin: 0;
+            font-size: 14px;
+        }
+        .action-bar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .q-table-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-x: auto;
+            backdrop-filter: blur(10px);
+        }
+        .q-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        .q-table th {
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding: 12px 16px;
+            font-weight: 600;
+            color: #70a1ff;
+            font-size: 14px;
+        }
+        .q-table td {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 14px 16px;
+            font-size: 14px;
+            vertical-align: top;
+            line-height: 1.5;
+        }
+        .q-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .opt-list {
+            margin: 0;
+            padding-left: 20px;
+            list-style-type: upper-alpha;
+        }
+        .opt-list li.is-correct {
+            color: #2ed573;
+            font-weight: 600;
+        }
+        .action-btn-group {
+            display: flex;
+            gap: 6px;
+        }
+        .btn-mini {
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .btn-edit {
+            background: rgba(30, 144, 255, 0.2);
+            color: #70a1ff;
+            border: 1px solid rgba(30, 144, 255, 0.3);
+        }
+        .btn-edit:hover {
+            background: #1e90ff;
+            color: #fff;
+        }
+        .btn-delete {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff6b81;
+            border: 1px solid rgba(255, 71, 87, 0.3);
+        }
+        .btn-delete:hover {
+            background: #ff4757;
+            color: #fff;
+        }
+        /* Modal Popup */
+        .q-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 10, 24, 0.85);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .q-modal-content {
+            background: #0d1222;
+            border: 1px solid rgba(0, 210, 211, 0.3);
+            box-shadow: 0 0 30px rgba(0, 210, 211, 0.15);
+            width: 90%;
+            max-width: 650px;
+            border-radius: 12px;
+            padding: 24px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .form-group {
+            margin-bottom: 14px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            color: #a4b0be;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            color: #fff;
+            outline: none;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: #00d2d3;
+            box-shadow: 0 0 8px rgba(0, 210, 211, 0.3);
+        }
+        .ans-option-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .ans-option-input input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #2ed573;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #a4b0be;
+            font-size: 16px;
+        }
+        .connection-indicator {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .indicator-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .indicator-dot.online { background-color: #2ed573; box-shadow: 0 0 8px #2ed573; }
+        .indicator-dot.offline { background-color: #ffa502; box-shadow: 0 0 8px #ffa502; }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <div class="admin-header">
+            <div class="admin-title">
+                <h1><i class="fa-solid fa-sliders"></i> Quản Lý Câu Hỏi Trắc Nghiệm</h1>
+                <p>Thiết lập, chỉnh sửa câu hỏi của phòng đấu phục vụ giảng dạy lý thuyết Kinh tế chính trị.</p>
+            </div>
+            <div class="connection-indicator">
+                <span id="connDot" class="indicator-dot offline"></span>
+                <span id="connText">Đang kết nối...</span>
+            </div>
+        </div>
+
+        <!-- Action Bar -->
+        <div class="action-bar">
+            <div class="room-indicator-card">
+                <span style="color: #a4b0be;">Mã phòng hiện tại:</span>
+                <strong id="roomIdText" style="color: #00d2d3; font-size: 16px; margin-left: 5px;">room_default</strong>
+            </div>
+            
+            <div class="action-buttons">
+                <!-- Quay lại Game -->
+                <a id="btnBackToGame" href="index.html" class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 8px 14px; font-size: 13px; border-radius: 8px; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-arrow-left"></i> Về game Máy chiếu
+                </a>
+                
+                <!-- Reset về mặc định -->
+                <button onclick="resetToSystemDefault()" class="btn" style="background: rgba(255, 71, 87, 0.15); color: #ff6b81; border: 1px solid rgba(255, 71, 87, 0.25); padding: 8px 14px; font-size: 13px; border-radius: 8px;">
+                    <i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định
+                </button>
+
+                <!-- Thêm câu hỏi -->
+                <button onclick="openAddModal()" class="btn btn-success" style="padding: 8px 16px; font-size: 13px; border-radius: 8px; font-weight: 600;">
+                    <i class="fa-solid fa-plus"></i> Thêm câu hỏi mới
+                </button>
+            </div>
+        </div>
+
+        <!-- Import panel -->
+        <div class="card" style="margin-bottom: 24px; padding: 16px; background: rgba(0, 210, 211, 0.03); border: 1px dashed rgba(0, 210, 211, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div style="text-align: left;">
+                    <strong style="color: #00d2d3; font-size: 15px;"><i class="fa-solid fa-file-import"></i> Nhập câu hỏi hàng loạt</strong>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #a4b0be; line-height: 1.4;">Hỗ trợ nhập từ file Word (.docx), file Text (.txt) hoặc file JSON cấu trúc chuẩn.</p>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="file" id="importFileInput" accept=".json,.txt,.docx" style="display: none;" onchange="handleAdminImport(event)">
+                    <button class="btn btn-primary" style="padding: 8px 16px; font-size: 13px; border-radius: 8px;" onclick="document.getElementById('importFileInput').click()">
+                        <i class="fa-solid fa-upload"></i> Chọn file dữ liệu
+                    </button>
+                    <button class="btn" style="background: rgba(255, 165, 2, 0.15); color: #ffa502; border: 1px solid rgba(255, 165, 2, 0.25); padding: 8px 16px; font-size: 13px; border-radius: 8px;" onclick="exportQuestionsText()">
+                        <i class="fa-solid fa-file-word"></i> Xuất dạng Word
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Questions List Table -->
+        <div class="q-table-card">
+            <table class="q-table" id="questionsTable">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">STT</th>
+                        <th>Nội dung câu hỏi</th>
+                        <th style="width: 280px;">Các phương án lựa chọn</th>
+                        <th>Giải thích học thuật</th>
+                        <th style="width: 140px; text-align: center;">Tác vụ</th>
+                    </tr>
+                </thead>
+                <tbody id="questionsList">
+                    <!-- Javascript renders questions here -->
+                </tbody>
+            </table>
+            <div id="noDataView" class="no-data hidden">
+                <i class="fa-regular fa-folder-open fa-3x" style="margin-bottom: 12px; color: #a4b0be;"></i>
+                <p>Chưa có câu hỏi nào được thiết lập cho phòng này.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Form (Add/Edit Question) -->
+    <div id="questionModal" class="q-modal hidden">
+        <div class="q-modal-content">
+            <h3 id="modalTitle" style="margin-top: 0; margin-bottom: 20px; font-size: 18px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; color: #fff;">
+                Chỉnh Sửa Câu Hỏi
+            </h3>
+            <form id="questionForm" onsubmit="saveQuestion(event)">
+                <input type="hidden" id="editIndex" value="-1">
+                
+                <!-- Câu hỏi -->
+                <div class="form-group">
+                    <label for="formQuestion"><i class="fa-solid fa-circle-question"></i> Nội dung câu hỏi</label>
+                    <textarea id="formQuestion" rows="3" required placeholder="Nhập câu hỏi trắc nghiệm..."></textarea>
+                </div>
+
+                <!-- 4 Đáp án -->
+                <div class="form-group">
+                    <label><i class="fa-solid fa-list-check"></i> Các đáp án và chọn đáp án Đúng</label>
+                    
+                    <div class="ans-option-input">
+                        <input type="radio" name="correctAnswer" value="0" required checked>
+                        <input type="text" id="opt0" required placeholder="Nhập đáp án A...">
+                    </div>
+                    <div class="ans-option-input">
+                        <input type="radio" name="correctAnswer" value="1" required>
+                        <input type="text" id="opt1" required placeholder="Nhập đáp án B...">
+                    </div>
+                    <div class="ans-option-input">
+                        <input type="radio" name="correctAnswer" value="2" required>
+                        <input type="text" id="opt2" required placeholder="Nhập đáp án C...">
+                    </div>
+                    <div class="ans-option-input">
+                        <input type="radio" name="correctAnswer" value="3" required>
+                        <input type="text" id="opt3" required placeholder="Nhập đáp án D...">
+                    </div>
+                </div>
+
+                <!-- Giải thích -->
+                <div class="form-group">
+                    <label for="formExplanation"><i class="fa-solid fa-graduation-cap"></i> Góc giải thích lý thuyết (Academic Explanation)</label>
+                    <textarea id="formExplanation" rows="3" placeholder="Nhập lời giải thích kiến thức để hiển thị cho học sinh..."></textarea>
+                </div>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end;">
+                    <button type="button" class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); width: 100px; padding: 10px;" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-success" style="width: 150px; padding: 10px;" id="btnSubmitForm">Lưu câu hỏi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <!-- Mammoth.js for client-side Word docx parser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
+    
+    <!-- Game Questions config and Script files -->
+    <script src="questions.js"></script>
+    <script src="config.js"></script>
+    <script src="questions-admin.js"></script>
+</body>
+</html>
