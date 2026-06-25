@@ -908,7 +908,7 @@ function drawFish(p, scaleX, scaleY) {
   ctx.fillRect(drawX - barW/2, drawY - radius - 8, barW, barH);
   
   // Tỉ lệ máu
-  const hpPercent = Math.min(1.0, p.hp / 300);
+  const hpPercent = Math.min(1.0, p.hp / 500);
   ctx.fillStyle = hasCombo ? '#ffa502' : p.hp > 150 ? '#2ed573' : p.hp > 60 ? '#1e90ff' : '#ff4757';
   ctx.fillRect(drawX - barW/2, drawY - radius - 8, barW * hpPercent, barH);
 }
@@ -1482,7 +1482,7 @@ function submitAnswer(selectedIdx) {
       rewardHp *= 3;
     }
 
-    currentHp = Math.min(300, currentHp + rewardHp);
+    currentHp = Math.min(500, currentHp + rewardHp);
     textTitle = `CHÍNH XÁC! (+${Math.round(rewardHp)} HP)${myCombo >= 2 ? ' Combo x' + myCombo + '! 🔥' : ''}`;
     textClass = "correct";
 
