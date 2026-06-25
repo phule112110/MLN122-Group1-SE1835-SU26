@@ -263,6 +263,26 @@ let marketTechData = {};
 let bubbles = [];
 const bgImage = new Image();
 bgImage.src = 'picture/backgroud.jpg';
+
+// Tải trước danh sách ảnh cá từ thư mục picture
+const fishImages = {};
+const fishIndices = [1, 3, 4, 5, 6, 7, 8, 9, 10];
+fishIndices.forEach(idx => {
+  const img = new Image();
+  img.src = `picture/${idx}.png`;
+  fishImages[idx] = img;
+});
+
+// Hàm lấy ảnh cá ngẫu nhiên nhưng nhất quán theo ID người chơi
+function getFishImageForPlayer(p) {
+  let hash = 0;
+  const idStr = p.id || '';
+  for (let i = 0; i < idStr.length; i++) {
+    hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const imgIndex = fishIndices[Math.abs(hash) % fishIndices.length];
+  return fishImages[imgIndex];
+}
 let gameState = {
   started: false,
   paused: false,
@@ -762,45 +782,56 @@ function drawFish(p, scaleX, scaleY) {
   ctx.shadowBlur = p.hasExtraSurplus ? 25 : 12;
   ctx.shadowColor = p.color;
 
-  // Vẽ đuôi cá (Wiggle chuyển động theo thời gian)
-  const wiggle = Math.sin(Date.now() * 0.01 + p.x * 0.05) * 0.25;
-  ctx.fillStyle = p.color;
-  ctx.beginPath();
-  ctx.moveTo(-radius * 0.8, 0);
-  ctx.lineTo(-radius * 1.5, -radius * (0.4 + wiggle));
-  ctx.lineTo(-radius * 1.3, 0);
-  ctx.lineTo(-radius * 1.5, radius * (0.4 - wiggle));
-  ctx.closePath();
-  ctx.fill();
+  // Thử vẽ hình ảnh cá từ thư mục picture, nếu chưa tải xong thì vẽ fallback vector
+  const fishImg = getFishImageForPlayer(p);
+  if (fishImg && fishImg.complete && fishImg.naturalWidth !== 0) {
+    ctx.save();
+    // Bỏ bóng mờ cho ảnh cá để tối ưu hiệu năng và hiển thị sắc nét
+    ctx.shadowBlur = 0;
+    // Vẽ ảnh cá (giữ tỉ lệ ngang dài hơn dọc một chút)
+    ctx.drawImage(fishImg, -radius, -radius * 0.8, radius * 2, radius * 1.6);
+    ctx.restore();
+  } else {
+    // Vẽ đuôi cá (Wiggle chuyển động theo thời gian)
+    const wiggle = Math.sin(Date.now() * 0.01 + p.x * 0.05) * 0.25;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.8, 0);
+    ctx.lineTo(-radius * 1.5, -radius * (0.4 + wiggle));
+    ctx.lineTo(-radius * 1.3, 0);
+    ctx.lineTo(-radius * 1.5, radius * (0.4 - wiggle));
+    ctx.closePath();
+    ctx.fill();
 
-  // Vẽ vây ngực cá
-  ctx.beginPath();
-  ctx.ellipse(-radius * 0.2, -radius * 0.5, radius * 0.2, radius * 0.4, -Math.PI/6, 0, Math.PI*2);
-  ctx.ellipse(-radius * 0.2, radius * 0.5, radius * 0.2, radius * 0.4, Math.PI/6, 0, Math.PI*2);
-  ctx.fill();
+    // Vẽ vây ngực cá
+    ctx.beginPath();
+    ctx.ellipse(-radius * 0.2, -radius * 0.5, radius * 0.2, radius * 0.4, -Math.PI/6, 0, Math.PI*2);
+    ctx.ellipse(-radius * 0.2, radius * 0.5, radius * 0.2, radius * 0.4, Math.PI/6, 0, Math.PI*2);
+    ctx.fill();
 
-  // Vẽ thân cá (Hình Elip)
-  ctx.beginPath();
-  ctx.ellipse(0, 0, radius, radius * 0.7, 0, 0, Math.PI * 2);
-  ctx.fill();
+    // Vẽ thân cá (Hình Elip)
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius, radius * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-  // Vẽ mắt cá
-  ctx.shadowBlur = 0; // Hủy bóng mờ cho mắt
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(radius * 0.4, -radius * 0.25, radius * 0.15, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#000000';
-  ctx.beginPath();
-  ctx.arc(radius * 0.45, -radius * 0.25, radius * 0.08, 0, Math.PI * 2);
-  ctx.fill();
+    // Vẽ mắt cá
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(radius * 0.4, -radius * 0.25, radius * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(radius * 0.45, -radius * 0.25, radius * 0.08, 0, Math.PI * 2);
+    ctx.fill();
 
-  // Vẽ vòng tròn trang trí đại diện cho quy mô doanh nghiệp
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 0.85, 0, Math.PI * 2);
-  ctx.stroke();
+    // Vẽ vòng tròn trang trí đại diện cho quy mô doanh nghiệp
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.85, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   ctx.restore();
 
