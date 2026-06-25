@@ -608,8 +608,43 @@ body {
 
 .color-option:has(input[type="radio"]:checked) {
     border-color: #fff;
-    transform: scale(1.1);
-    box-shadow: 0 0 10px rgba(255,255,255,0.4);
+    transform: scale(1.05);
+}
+
+.fish-picker {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+
+.fish-option {
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid transparent;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 6px;
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+.fish-option input[type="radio"] {
+    opacity: 0;
+    position: absolute;
+}
+
+.fish-option:has(input[type="radio"]:checked) {
+    border-color: var(--color-cyan);
+    background: rgba(0, 210, 211, 0.1);
+    transform: scale(1.05);
+}
+
+.fish-option img {
+    width: 100%;
+    height: auto;
+    max-height: 38px;
+    object-fit: contain;
 }
 
 /* Controller Screen */

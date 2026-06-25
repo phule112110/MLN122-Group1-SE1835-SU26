@@ -273,10 +273,13 @@ fishIndices.forEach(idx => {
   fishImages[idx] = img;
 });
 
-// Hàm lấy ảnh cá ngẫu nhiên nhưng nhất quán theo ID người chơi
+// Hàm lấy ảnh cá do người chơi chọn hoặc fallback theo mã ID (dành cho AI)
 function getFishImageForPlayer(p) {
+  if (p && p.fishType && fishImages[p.fishType]) {
+    return fishImages[p.fishType];
+  }
   let hash = 0;
-  const idStr = p.id || '';
+  const idStr = (p && p.id) || '';
   for (let i = 0; i < idStr.length; i++) {
     hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
   }
@@ -348,6 +351,7 @@ function initSpectator() {
         localPlayers[id].stunnedUntil = players[id].stunnedUntil || 0;
         localPlayers[id].comboUntil = players[id].comboUntil || 0;
         localPlayers[id].combo = players[id].combo || 0;
+        localPlayers[id].fishType = players[id].fishType || 1;
       }
     }
 
@@ -1191,6 +1195,15 @@ function handleJoin(e) {
 
   if (!myPlayerName) return;
 
+  let myPlayerFish = 1;
+  const fishes = document.getElementsByName('playerFish');
+  for (let f of fishes) {
+    if (f.checked) {
+      myPlayerFish = parseInt(f.value) || 1;
+      break;
+    }
+  }
+
   // Đăng ký người chơi lên Database
   db.updatePlayer(myPlayerId, {
     id: myPlayerId,
@@ -1208,7 +1221,8 @@ function handleJoin(e) {
     combo: 0,
     comboUntil: 0,
     invulnUntil: Date.now() + 10000,
-    stunnedUntil: 0
+    stunnedUntil: 0,
+    fishType: myPlayerFish
   });
 
   // Điều hướng sang màn hình tương ứng
