@@ -790,8 +790,6 @@ function drawFish(p, scaleX, scaleY) {
   const fishImg = getFishImageForPlayer(p);
   if (fishImg && fishImg.complete && fishImg.naturalWidth !== 0) {
     ctx.save();
-    // Bỏ bóng mờ cho ảnh cá để tối ưu hiệu năng và hiển thị sắc nét
-    ctx.shadowBlur = 0;
     // Vẽ ảnh cá (giữ tỉ lệ ngang dài hơn dọc một chút)
     ctx.drawImage(fishImg, -radius, -radius * 0.8, radius * 2, radius * 1.6);
     ctx.restore();
