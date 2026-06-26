@@ -266,7 +266,7 @@ bgImage.src = 'picture/backgroud.jpg';
 
 // Tải trước danh sách ảnh cá từ thư mục picture
 const fishImages = {};
-const fishIndices = [1, 3, 4, 5, 6, 8, 9, 10];
+const fishIndices = [1, 3, 4, 5, 6, 7, 8, 9, 10];
 fishIndices.forEach(idx => {
   const img = new Image();
   img.src = `picture/${idx}.png`;
